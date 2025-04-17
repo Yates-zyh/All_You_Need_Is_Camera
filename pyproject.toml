@@ -1,0 +1,35 @@
+[project]
+name = "project"
+version = "0.1.0"
+description = "All You Need Is Camera - Interactive Framework using YOLOv8-Pose"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "filterpy>=1.4.5",
+    "opencv-python>=4.11.0.86",
+    "pygame>=2.6.1",
+    "scipy>=1.15.2",
+    "torch>=2.6.0",
+    "ultralytics>=8.3.110",
+    "numpy>=1.23.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+]
+
+[tool.setuptools]
+packages = ["aync_camera"]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
