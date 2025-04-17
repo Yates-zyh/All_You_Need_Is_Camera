@@ -22,25 +22,23 @@ DIFFICULTY_PRESETS = {
 }
 
 # Default lane to keypoint mapping (COCO format)
-# Left Ankle = 15, Right Ankle = 16, Left Wrist = 9, Right Wrist = 10
+# Left Wrist = 9, Right Wrist = 10
 DEFAULT_LANE_KEYPOINT_MAP = {
-    0: 15,  # Left Ankle -> Lane 0
+    0: 9,   # Left Wrist -> Lane 0
     1: 9,   # Left Wrist -> Lane 1
     2: 10,  # Right Wrist -> Lane 2
-    3: 16   # Right Ankle -> Lane 3
+    3: 10   # Right Wrist -> Lane 3
 }
 
 # Keypoint labels for display
 KEYPOINT_LABELS = {
     9: "L Hand",
-    10: "R Hand",
-    15: "L Foot",
-    16: "R Foot"
+    10: "R Hand"
 }
 
 # Game window settings
-DEFAULT_SCREEN_WIDTH = 800
-DEFAULT_SCREEN_HEIGHT = 600
+DEFAULT_SCREEN_WIDTH = 1280
+DEFAULT_SCREEN_HEIGHT = 720
 
 # Game colors
 COLORS = {

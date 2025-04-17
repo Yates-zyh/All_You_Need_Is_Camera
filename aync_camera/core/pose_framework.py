@@ -57,6 +57,9 @@ class PoseFramework:
         # Record timestamp
         current_time = time.time()
         
+        # Mirror the frame horizontally (flip left-right)
+        frame = cv2.flip(frame, 1)
+        
         # Run YOLOv8-Pose inference
         with torch.no_grad():
             results = self.model.predict(
@@ -88,6 +91,18 @@ class PoseFramework:
                         'keypoints_conf': keypoints_np[i, :, 2].tolist() if keypoints_np.shape[2] > 2 else [1.0] * keypoints_np.shape[1],
                         'trajectory': None  # Will be filled by tracking
                     }
+                    
+                    # Swap left and right keypoints due to mirroring
+                    # COCO keypoint format pairs to swap: (5,6), (7,8), (9,10), (11,12), (13,14), (15,16)
+                    pairs_to_swap = [(5,6), (7,8), (9,10), (11,12), (13,14), (15,16)]
+                    for left_idx, right_idx in pairs_to_swap:
+                        if left_idx < len(person_data['keypoints_xy']) and right_idx < len(person_data['keypoints_xy']):
+                            # Swap coordinates
+                            person_data['keypoints_xy'][left_idx], person_data['keypoints_xy'][right_idx] = \
+                                person_data['keypoints_xy'][right_idx], person_data['keypoints_xy'][left_idx]
+                            # Swap confidences
+                            person_data['keypoints_conf'][left_idx], person_data['keypoints_conf'][right_idx] = \
+                                person_data['keypoints_conf'][right_idx], person_data['keypoints_conf'][left_idx]
                     
                     # Add to detected persons list if confidence is sufficient
                     if person_data['confidence'] > self.confidence_threshold:
@@ -126,23 +141,29 @@ class PoseFramework:
         # Prepare output
         framework_output = {
             'timestamp': current_time,
-            'persons': detected_persons
+            'persons': detected_persons,
+            'mirrored_frame': frame  # Include the mirrored frame in the output
         }
         
         return framework_output
     
-    def draw_results(self, frame: np.ndarray, pose_data: Dict) -> np.ndarray:
+    def draw_results(self, frame: np.ndarray, pose_data: Dict, highlight_palms: bool = True) -> np.ndarray:
         """
         Draw detection and tracking results on a frame.
         
         Args:
             frame: Input image frame.
             pose_data: Pose data from process_frame().
+            highlight_palms: Whether to highlight palm positions with special markers
             
         Returns:
             Frame with visualizations.
         """
-        vis_frame = frame.copy()
+        # Use the mirrored frame if available
+        if 'mirrored_frame' in pose_data:
+            vis_frame = pose_data['mirrored_frame'].copy()
+        else:
+            vis_frame = frame.copy()
         
         for person in pose_data['persons']:
             # Draw bounding box
@@ -165,47 +186,78 @@ class PoseFramework:
             keypoints = person['keypoints_xy']
             confidences = person['keypoints_conf']
             
-            # COCO keypoint connections (simplification)
+            # COCO keypoint connections (comprehensive skeleton)
             connections = [
                 (5, 7), (7, 9),     # Left arm
                 (6, 8), (8, 10),    # Right arm
                 (11, 13), (13, 15), # Left leg
                 (12, 14), (14, 16), # Right leg
-                (5, 6), (5, 11), (6, 12), (11, 12) # Torso
+                (5, 6),             # Shoulders
+                (5, 11), (6, 12),   # Torso sides
+                (11, 12),           # Hips
+                (0, 1), (1, 2), (2, 3), (3, 4), # Face
+                (0, 5), (0, 6)      # Neck
             ]
             
-            # Draw skeleton
+            # Draw skeleton with thicker lines
             for i, j in connections:
                 if i < len(keypoints) and j < len(keypoints):
                     if confidences[i] > 0.5 and confidences[j] > 0.5:
                         pt1 = tuple(map(int, keypoints[i]))
                         pt2 = tuple(map(int, keypoints[j]))
-                        cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 2)
+                        cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 3)
             
-            # Draw keypoints
+            # Draw all keypoints
             for i, (x, y) in enumerate(keypoints):
                 if confidences[i] > 0.5:
+                    # Regular keypoints
                     cv2.circle(vis_frame, (int(x), int(y)), 4, (0, 0, 255), -1)
             
-            # Draw trajectory for right wrist (keypoint 10)
+            # Highlight palm positions (wrists) with special markers
+            if highlight_palms:
+                # Left wrist (keypoint 9) and right wrist (keypoint 10)
+                wrist_indices = [9, 10]
+                for idx in wrist_indices:
+                    if idx < len(keypoints) and confidences[idx] > 0.5:
+                        x, y = map(int, keypoints[idx])
+                        # Draw larger circle
+                        cv2.circle(vis_frame, (x, y), 15, (0, 255, 255), 2)
+                        # Draw cross inside
+                        cv2.line(vis_frame, (x-10, y), (x+10, y), (0, 255, 255), 2)
+                        cv2.line(vis_frame, (x, y-10), (x, y+10), (0, 255, 255), 2)
+                        # Add label
+                        label = "Left Palm" if idx == 9 else "Right Palm"
+                        cv2.putText(
+                            vis_frame,
+                            label,
+                            (x + 15, y),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            (0, 255, 255),
+                            2
+                        )
+            
+            # Draw trajectory for both wrists
             if person['trajectory'] and len(person['trajectory']) > 1:
-                wrist_idx = 10  # Right wrist in COCO format
+                wrist_indices = [9, 10]  # Both left and right wrist
+                colors = [(255, 255, 0), (0, 255, 255)]  # Yellow for left, cyan for right
                 
-                # Get trajectory points
-                pts = []
-                for hist in person['trajectory']:
-                    if hist[wrist_idx][0] > 0 and hist[wrist_idx][1] > 0:
-                        pts.append(tuple(map(int, hist[wrist_idx])))
-                
-                # Draw trajectory line
-                if len(pts) > 1:
-                    for i in range(1, len(pts)):
-                        cv2.line(vis_frame, pts[i-1], pts[i], (255, 255, 0), 2)
+                for wrist_idx, color in zip(wrist_indices, colors):
+                    # Get trajectory points
+                    pts = []
+                    for hist in person['trajectory']:
+                        if hist[wrist_idx][0] > 0 and hist[wrist_idx][1] > 0:
+                            pts.append(tuple(map(int, hist[wrist_idx])))
+                    
+                    # Draw trajectory line
+                    if len(pts) > 1:
+                        for i in range(1, len(pts)):
+                            cv2.line(vis_frame, pts[i-1], pts[i], color, 2)
         
         return vis_frame
     
     @staticmethod
-    def setup_camera(camera_id: int = 0, width: int = 640, height: int = 480) -> cv2.VideoCapture:
+    def setup_camera(camera_id: int = 0, width: int = 1280, height: int = 720) -> cv2.VideoCapture:
         """
         Set up and configure a camera for capturing.
         

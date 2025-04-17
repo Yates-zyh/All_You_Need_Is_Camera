@@ -40,14 +40,14 @@ def parse_args():
     parser.add_argument(
         "--width",
         type=int,
-        default=800,
-        help="Game window width (default: 800)",
+        default=1280,
+        help="Game window width (default: 1280)",
     )
     parser.add_argument(
         "--height",
         type=int,
-        default=600,
-        help="Game window height (default: 600)",
+        default=720,
+        help="Game window height (default: 720)",
     )
     return parser.parse_args()
 

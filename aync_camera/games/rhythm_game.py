@@ -114,7 +114,7 @@ class FallingNoteGame:
         self.screen_height = screen_height
         self.num_lanes = 4
         self.lane_width = self.screen_width // self.num_lanes
-        self.hit_zone_height = 50
+        self.hit_zone_height = 100  # Increased hit zone height for easier detection
         self.note_width = self.lane_width - 20  # 10px padding on each side
         self.note_height = 30
         self.note_speed = self.difficulty_settings["note_speed"]
@@ -140,8 +140,22 @@ class FallingNoteGame:
             ) for i in range(self.num_lanes)
         ]
         
+        # Vertical detection zones for each lane (full height columns)
+        self.vertical_lanes = [
+            pygame.Rect(
+                i * self.lane_width, 
+                0, 
+                self.lane_width, 
+                self.screen_height
+            ) for i in range(self.num_lanes)
+        ]
+        
         # Active notes
         self.notes = []
+        
+        # Palm hit feedback (visual indicator for successful hits)
+        self.hit_feedback = []  # List of (x, y, time, lane) tuples for hit animations
+        self.hit_feedback_duration = 0.5  # Duration in seconds to show hit feedback
         
         # Setup screen
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
@@ -176,33 +190,7 @@ class FallingNoteGame:
         # Instructions overlay flag
         self.show_instructions = True
         self.instructions_timer = time.time() + 5.0  # Show for 5 seconds
-        
-    def spawn_note(self):
-        """Randomly spawn a new note."""
-        if random.random() < self.spawn_rate:
-            lane = random.randint(0, self.num_lanes - 1)
-            x = lane * self.lane_width + (self.lane_width - self.note_width) // 2
-            note = Note(
-                lane=lane,
-                x=x,
-                y=0,
-                width=self.note_width,
-                height=self.note_height,
-                speed=self.note_speed
-            )
-            self.notes.append(note)
-            
-    def update_notes(self):
-        """Update all active notes."""
-        for note in self.notes[:]:  # Iterate over a copy for safe removal
-            if note.update(self.screen_height):
-                # Note is offscreen or needs to be removed
-                if note.missed and not note.hit:
-                    # Note was missed
-                    self.misses += 1
-                    self.combo = 0
-                self.notes.remove(note)
-                
+
     def check_hits(self, pose_data):
         """
         Check for hits between player pose and notes.
@@ -218,35 +206,42 @@ class FallingNoteGame:
         keypoints = person['keypoints_xy']
         keypoints_conf = person['keypoints_conf']
         
+        # Only consider wrist keypoints (9: left wrist, 10: right wrist)
+        wrist_indices = [9, 10]
+        palm_positions = {}
+        
+        # Get palm positions with confidence threshold
+        for idx in wrist_indices:
+            if idx < len(keypoints) and keypoints_conf[idx] >= self.confidence_threshold:
+                palm_positions[idx] = (int(keypoints[idx][0]), int(keypoints[idx][1]))
+        
         # Check each lane
         for lane in range(self.num_lanes):
-            # Get the corresponding keypoint
+            # Get the corresponding keypoint for this lane
             keypoint_idx = self.lane_keypoint_map.get(lane)
-            if keypoint_idx is None or keypoint_idx >= len(keypoints):
+            if keypoint_idx not in palm_positions:
                 continue
-                
-            # Check if keypoint is confident enough
-            if keypoints_conf[keypoint_idx] < self.confidence_threshold:
-                continue
-                
-            # Get keypoint position
-            kx, ky = keypoints[keypoint_idx]
-            kx, ky = int(kx), int(ky)
             
-            # Check if keypoint is in the hit zone
-            if not self.hit_zones[lane].collidepoint(kx, ky):
+            # Get palm position
+            px, py = palm_positions[keypoint_idx]
+            
+            # Check if palm is in the vertical lane
+            if not self.vertical_lanes[lane].collidepoint(px, py):
                 continue
                 
             # Check for note collision in this lane
             for note in self.notes[:]:
-                if note.lane == lane and self.hit_zones[lane].colliderect(note.rect) and not note.hit:
+                if note.lane == lane and note.y > self.screen_height * 0.6 and not note.hit:
+                    # Only check notes that have fallen past 60% of the screen height
+                    # and are in the vertical lane where the palm is detected
+                    
                     # Hit!
                     self.hits += 1
                     
                     # Calculate score (with combo multiplier if enabled)
                     hit_score = SCORE_PER_HIT
                     if COMBO_MULTIPLIER:
-                        hit_score *= (self.combo + 1)
+                        hit_score *= max(1, self.combo)
                     self.score += hit_score
                     
                     # Update combo
@@ -256,8 +251,11 @@ class FallingNoteGame:
                     # Mark note as hit and remove
                     note.hit = True
                     self.notes.remove(note)
+                    
+                    # Add visual hit feedback
+                    self.hit_feedback.append((px, py, time.time(), lane))
                     break
-    
+
     def draw_game(self, camera_frame=None):
         """
         Draw the game screen.
@@ -272,12 +270,16 @@ class FallingNoteGame:
         if camera_frame is not None:
             # Resize to fit screen
             camera_frame = cv2.resize(camera_frame, (self.screen_width, self.screen_height))
+            # Process frame through pose framework to get pose data
+            pose_data = self.framework.process_frame(camera_frame)
+            # Draw pose visualization
+            camera_frame_with_pose = self.framework.draw_results(camera_frame, pose_data, highlight_palms=True)
             # Convert to RGB for pygame
-            camera_frame = cv2.cvtColor(camera_frame, cv2.COLOR_BGR2RGB)
+            camera_frame_with_pose = cv2.cvtColor(camera_frame_with_pose, cv2.COLOR_BGR2RGB)
             # Convert to pygame surface
-            surface = pygame.surfarray.make_surface(camera_frame.swapaxes(0, 1))
+            surface = pygame.surfarray.make_surface(camera_frame_with_pose.swapaxes(0, 1))
             # Add transparency
-            surface.set_alpha(128)
+            surface.set_alpha(160)  # Slightly more opaque to see the pose better
             # Draw
             self.screen.blit(surface, (0, 0))
         
@@ -292,10 +294,19 @@ class FallingNoteGame:
                 2
             )
             
-            # Draw hit zones
-            pygame.draw.rect(self.screen, COLORS["green"], self.hit_zones[i], 2)
+            # Draw vertical lane detection zones (semi-transparent)
+            lane_surface = pygame.Surface((self.lane_width, self.screen_height), pygame.SRCALPHA)
+            lane_color = (0, 255, 0, 40) if i < 2 else (0, 0, 255, 40)  # Green for left, Blue for right
+            pygame.draw.rect(lane_surface, lane_color, pygame.Rect(0, 0, self.lane_width, self.screen_height))
+            self.screen.blit(lane_surface, (i * self.lane_width, 0))
             
-            # Draw lane labels (which body part controls which lane)
+            # Draw hit zones (more visible)
+            hit_zone_surface = pygame.Surface((self.lane_width, self.hit_zone_height), pygame.SRCALPHA)
+            hit_zone_color = (0, 255, 0, 80) if i < 2 else (0, 0, 255, 80)
+            pygame.draw.rect(hit_zone_surface, hit_zone_color, pygame.Rect(0, 0, self.lane_width, self.hit_zone_height))
+            self.screen.blit(hit_zone_surface, (i * self.lane_width, self.screen_height - self.hit_zone_height))
+            
+            # Draw lane labels
             kp_idx = self.lane_keypoint_map.get(i)
             if kp_idx in KEYPOINT_LABELS:
                 label = KEYPOINT_LABELS[kp_idx]
@@ -306,6 +317,34 @@ class FallingNoteGame:
         # Draw notes
         for note in self.notes:
             note.draw(self.screen)
+        
+        # Draw hit feedback animations
+        current_time = time.time()
+        for hit_x, hit_y, hit_time, lane in self.hit_feedback[:]:
+            # Calculate animation progress (0.0 to 1.0)
+            elapsed = current_time - hit_time
+            if elapsed > self.hit_feedback_duration:
+                self.hit_feedback.remove((hit_x, hit_y, hit_time, lane))
+                continue
+                
+            progress = elapsed / self.hit_feedback_duration
+            size = int(50 * (1.0 - progress))  # Start big, shrink as animation progresses
+            alpha = int(255 * (1.0 - progress))  # Fade out
+            
+            # Draw hit effect
+            color = COLORS["green"] if lane < 2 else COLORS["cyan"]
+            hit_surface = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(hit_surface, (*color, alpha), (size, size), size)
+            self.screen.blit(hit_surface, (hit_x - size, hit_y - size))
+            
+            # Draw "HIT!" text that floats upward
+            text = self.font_medium.render("HIT!", True, color)
+            text_surface = pygame.Surface(text.get_size(), pygame.SRCALPHA)
+            text_surface.fill((0, 0, 0, 0))  # Transparent
+            text_surface.blit(text, (0, 0))
+            text_surface.set_alpha(alpha)
+            offset_y = int(30 * progress)  # Text floats upward
+            self.screen.blit(text_surface, (hit_x - text.get_width() // 2, hit_y - text.get_height() - offset_y))
             
         # Draw score and combo
         score_text = self.font_medium.render(f"Score: {self.score}", True, COLORS["white"])
@@ -343,7 +382,7 @@ class FallingNoteGame:
         # Draw pause screen if paused
         if self.paused:
             self._draw_pause_screen()
-    
+
     def _draw_instructions(self):
         """Draw game instructions overlay."""
         # Semi-transparent overlay
@@ -358,10 +397,10 @@ class FallingNoteGame:
         
         # Instructions
         instructions = [
-            "Move your hands and feet to hit the falling notes",
-            "Left Foot controls Lane 1, Left Hand controls Lane 2",
-            "Right Hand controls Lane 3, Right Foot controls Lane 4",
-            "Move a body part into the green zone when a note reaches it",
+            "Move your hands to hit the falling notes",
+            "Left Hand controls Lanes 1 & 2",
+            "Right Hand controls Lanes 3 & 4",
+            "Move your palm into a lane when a note reaches the bottom",
             "",
             f"Difficulty: {self.difficulty.capitalize()}",
             "",
@@ -396,7 +435,33 @@ class FallingNoteGame:
             text = self.font_medium.render(line, True, COLORS["white"])
             rect = text.get_rect(center=(self.screen_width // 2, self.screen_height // 2 + 20 + i * 40))
             self.screen.blit(text, rect)
-        
+    
+    def spawn_note(self):
+        """Randomly spawn a new note."""
+        if random.random() < self.spawn_rate:
+            lane = random.randint(0, self.num_lanes - 1)
+            x = lane * self.lane_width + (self.lane_width - self.note_width) // 2
+            note = Note(
+                lane=lane,
+                x=x,
+                y=0,
+                width=self.note_width,
+                height=self.note_height,
+                speed=self.note_speed
+            )
+            self.notes.append(note)
+            
+    def update_notes(self):
+        """Update all active notes."""
+        for note in self.notes[:]:  # Iterate over a copy for safe removal
+            if note.update(self.screen_height):
+                # Note is offscreen or needs to be removed
+                if note.missed and not note.hit:
+                    # Note was missed
+                    self.misses += 1
+                    self.combo = 0
+                self.notes.remove(note)
+    
     def run(self):
         """Run the game loop."""
         try:
