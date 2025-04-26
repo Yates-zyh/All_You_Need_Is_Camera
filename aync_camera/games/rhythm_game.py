@@ -1,5 +1,5 @@
 """
-Falling-Note Rhythm Game implementation using the PoseFramework.
+Cytus-style Rhythm Game implementation using the PoseFramework.
 """
 import random
 import time
@@ -19,70 +19,127 @@ from aync_camera.games.game_config import (COLORS, COMBO_MULTIPLIER,
 
 
 class Note:
-    """Represents a falling note in the rhythm game."""
+    """Represents a note with shrinking judgment circle in the rhythm game."""
     
-    def __init__(self, lane: int, x: int, y: int, width: int, height: int, speed: float = 5.0):
+    def __init__(self, x: int, y: int, radius: int, max_radius: int, duration: float = 2.0):
         """
         Initialize a new note.
         
         Args:
-            lane: Lane index (0-3)
-            x: X-coordinate
-            y: Y-coordinate
-            width: Note width
-            height: Note height
-            speed: Falling speed in pixels per frame
+            x: X-coordinate of note center
+            y: Y-coordinate of note center
+            radius: Radius of the note itself (inner circle)
+            max_radius: Initial radius of the judgment circle (outer circle)
+            duration: Time in seconds for judgment circle to shrink completely
         """
-        self.lane = lane
         self.x = x
         self.y = y
-        self.width = width
-        self.height = height
-        self.speed = speed
-        self.rect = pygame.Rect(x, y, width, height)
+        self.radius = radius
+        self.max_radius = max_radius
+        self.current_radius = max_radius
+        self.duration = duration
+        self.start_time = time.time()
         self.hit = False
         self.missed = False
+        self.judged = False  # Flag to indicate this note has been judged
+        self.hit_feedback_time = None
+        # 添加消除相关属性
+        self.fade_out = False
+        self.fade_start_time = None
+        self.fade_duration = 1.0  # 消失动画持续1秒
+        self.opacity = 255  # 完全不透明
         
-    def update(self, screen_height: int):
+    def update(self):
         """
-        Update note position.
+        Update judgment circle radius based on elapsed time.
         
-        Args:
-            screen_height: Height of the screen
-            
         Returns:
-            True if note should be removed (offscreen), False otherwise
+            True if judgment timing is reached (circle fully shrunk), False otherwise
         """
-        self.y += self.speed
-        self.rect.y = self.y
+        current_time = time.time()
         
-        # Check if note is offscreen
-        if self.y > screen_height:
-            self.missed = True
+        # 处理淡出效果
+        if self.fade_out:
+            fade_elapsed = current_time - self.fade_start_time
+            # 计算不透明度 (从255到0)
+            self.opacity = max(0, 255 - int(255 * (fade_elapsed / self.fade_duration)))
+            # 如果完全透明，可以移除
+            if self.opacity <= 0:
+                return True
+            return False
+            
+        # 如果已判定但还没开始淡出，启动淡出倒计时
+        if self.judged and not self.fade_out:
+            self.fade_out = True
+            self.fade_start_time = current_time
+            return False
+        
+        # 正常更新逻辑（圈的缩小）
+        if self.judged:
+            return False
+            
+        elapsed = current_time - self.start_time
+        progress = min(1.0, elapsed / self.duration)
+        
+        # Shrink judgment circle from max_radius to note radius
+        self.current_radius = self.max_radius - progress * (self.max_radius - self.radius)
+        
+        # Check if judgment circle is fully shrunk (judgment timing)
+        if progress >= 1.0:
             return True
             
         return False
     
     def draw(self, screen):
         """
-        Draw the note.
+        Draw the note and judgment circle.
         
         Args:
             screen: Pygame screen to draw on
         """
-        color = COLORS["blue"]  # Blue for regular notes
-        if self.hit:
-            color = COLORS["green"]  # Green for hit notes
-        elif self.missed:
-            color = COLORS["red"]  # Red for missed notes
+        # 如果在淡出状态，绘制半透明版本
+        if self.fade_out:
+            # 绘制半透明的note
+            color = COLORS["blue"]
+            if self.hit:
+                color = COLORS["green"]
+            elif self.missed:
+                color = COLORS["red"]
+                
+            # 创建带透明度的表面
+            note_surface = pygame.Surface((self.radius*2, self.radius*2), pygame.SRCALPHA)
+            border_surface = pygame.Surface((self.radius*2, self.radius*2), pygame.SRCALPHA)
             
-        pygame.draw.rect(screen, color, self.rect)
-        # Add a border
-        pygame.draw.rect(screen, COLORS["white"], self.rect, 2)
+            # 绘制带透明度的内部圆
+            pygame.draw.circle(note_surface, (*color[:3], self.opacity), (self.radius, self.radius), self.radius)
+            # 绘制带透明度的边框
+            pygame.draw.circle(border_surface, (*COLORS["white"][:3], self.opacity), (self.radius, self.radius), self.radius, 2)
+            
+            # 绘制到屏幕上
+            screen.blit(note_surface, (self.x - self.radius, self.y - self.radius))
+            screen.blit(border_surface, (self.x - self.radius, self.y - self.radius))
+            return
+        
+        # 正常绘制逻辑
+        # Draw judgment circle (outer circle)
+        if not self.judged:
+            # Draw outer circle (judgment circle)
+            pygame.draw.circle(screen, COLORS["white"], (self.x, self.y), int(self.current_radius), 2)
+        
+        # Draw note circle (inner circle)
+        color = COLORS["blue"]  # Regular note
+        if self.hit:
+            color = COLORS["green"]  # Hit note
+        elif self.missed:
+            color = COLORS["red"]  # Missed note
+            
+        pygame.draw.circle(screen, color, (self.x, self.y), self.radius)
+        # Add border to note circle
+        pygame.draw.circle(screen, COLORS["white"], (self.x, self.y), self.radius, 2)
 
 
-class FallingNoteGame:
-    """Falling-Note Rhythm Game using body pose as controls."""
+class CytusStyleGame:
+    """Cytus-style Rhythm Game using body pose as controls."""
     
     def __init__(
         self, 
@@ -112,14 +169,16 @@ class FallingNoteGame:
         # Game settings
         self.screen_width = screen_width
         self.screen_height = screen_height
-        self.num_lanes = 4
-        self.lane_width = self.screen_width // self.num_lanes
-        self.hit_zone_height = 100  # Increased hit zone height for easier detection
-        self.note_width = self.lane_width - 20  # 10px padding on each side
-        self.note_height = 30
-        self.note_speed = self.difficulty_settings["note_speed"]
-        self.spawn_rate = self.difficulty_settings["spawn_rate"]
+        self.note_radius = 40  # Inner circle radius
+        self.max_radius = 120  # Initial judgment circle radius
+        self.acceptance_radius = 70  # How close hand must be to note center to count as hit
+        self.spawn_rate = self.difficulty_settings["spawn_rate"] * 2  # Adjusted for new gameplay
+        
+        # 增加note持续时间，减慢圈的缩小速度（原来是5.0减去速度，现在是8.0减去速度）
+        self.note_duration = max(3.0, 8.0 - self.difficulty_settings["note_speed"])  
+        
         self.confidence_threshold = self.difficulty_settings["confidence_threshold"]
+        self.padding = 100  # Padding from screen edges for note spawning
         
         # Game state
         self.score = 0
@@ -130,36 +189,16 @@ class FallingNoteGame:
         self.game_over = False
         self.paused = False
         
-        # Create hit zones (rectangles at the bottom of each lane)
-        self.hit_zones = [
-            pygame.Rect(
-                i * self.lane_width, 
-                self.screen_height - self.hit_zone_height, 
-                self.lane_width, 
-                self.hit_zone_height
-            ) for i in range(self.num_lanes)
-        ]
-        
-        # Vertical detection zones for each lane (full height columns)
-        self.vertical_lanes = [
-            pygame.Rect(
-                i * self.lane_width, 
-                0, 
-                self.lane_width, 
-                self.screen_height
-            ) for i in range(self.num_lanes)
-        ]
-        
         # Active notes
         self.notes = []
         
-        # Palm hit feedback (visual indicator for successful hits)
-        self.hit_feedback = []  # List of (x, y, time, lane) tuples for hit animations
+        # Hit feedback (visual indicator for successful hits)
+        self.hit_feedback = []  # List of (x, y, time, hit_type) tuples for hit animations
         self.hit_feedback_duration = 0.5  # Duration in seconds to show hit feedback
         
         # Setup screen
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-        pygame.display.set_caption(f"Falling-Note Rhythm Game - {difficulty.capitalize()} Mode")
+        pygame.display.set_caption(f"Cytus-style Rhythm Game - {difficulty.capitalize()} Mode")
         self.clock = pygame.time.Clock()
         
         # Initialize pose framework
@@ -169,8 +208,8 @@ class FallingNoteGame:
         )
         self.cap = self.framework.setup_camera(camera_id=camera_id)
         
-        # Keypoint mapping (which keypoint controls which lane)
-        self.lane_keypoint_map = DEFAULT_LANE_KEYPOINT_MAP.copy()
+        # Keypoint indices (9: left wrist, 10: right wrist)
+        self.keypoint_indices = [9, 10]
         
         # Load fonts
         self.font_large = pygame.font.Font(None, 48)
@@ -215,26 +254,24 @@ class FallingNoteGame:
             if idx < len(keypoints) and keypoints_conf[idx] >= self.confidence_threshold:
                 palm_positions[idx] = (int(keypoints[idx][0]), int(keypoints[idx][1]))
         
-        # Check each lane
-        for lane in range(self.num_lanes):
-            # Get the corresponding keypoint for this lane
-            keypoint_idx = self.lane_keypoint_map.get(lane)
-            if keypoint_idx not in palm_positions:
+        # Check each note
+        for note in self.notes:
+            if note.judged:
                 continue
             
-            # Get palm position
-            px, py = palm_positions[keypoint_idx]
-            
-            # Check if palm is in the vertical lane
-            if not self.vertical_lanes[lane].collidepoint(px, py):
-                continue
+            # Check for note collision with palms
+            for idx in wrist_indices:
+                if idx not in palm_positions:
+                    continue
                 
-            # Check for note collision in this lane
-            for note in self.notes[:]:
-                if note.lane == lane and note.y > self.screen_height * 0.6 and not note.hit:
-                    # Only check notes that have fallen past 60% of the screen height
-                    # and are in the vertical lane where the palm is detected
-                    
+                # Get palm position
+                px, py = palm_positions[idx]
+                
+                # Calculate distance from palm to note center
+                distance = ((note.x - px) ** 2 + (note.y - py) ** 2) ** 0.5
+                
+                # Check if palm is within acceptance radius of note center
+                if distance <= self.acceptance_radius:
                     # Hit!
                     self.hits += 1
                     
@@ -248,13 +285,22 @@ class FallingNoteGame:
                     self.combo += 1
                     self.max_combo = max(self.max_combo, self.combo)
                     
-                    # Mark note as hit and remove
+                    # Mark note as hit
                     note.hit = True
-                    self.notes.remove(note)
+                    note.judged = True  # Mark this note as judged
                     
                     # Add visual hit feedback
-                    self.hit_feedback.append((px, py, time.time(), lane))
+                    note.hit_feedback_time = time.time()
+                    self.hit_feedback.append((note.x, note.y, note.hit_feedback_time, "hit"))
                     break
+                
+            # Check if note is missed (judgment timing reached without being hit)
+            if not note.hit and note.update():
+                # Note was missed
+                self.misses += 1
+                self.combo = 0
+                note.missed = True
+                note.judged = True  # Mark this note as judged
 
     def draw_game(self, camera_frame=None):
         """
@@ -283,48 +329,17 @@ class FallingNoteGame:
             # Draw
             self.screen.blit(surface, (0, 0))
         
-        # Draw lanes and hit zones
-        for i in range(self.num_lanes):
-            # Draw lane dividers
-            pygame.draw.line(
-                self.screen,
-                COLORS["white"],
-                (i * self.lane_width, 0),
-                (i * self.lane_width, self.screen_height),
-                2
-            )
-            
-            # Draw vertical lane detection zones (semi-transparent)
-            lane_surface = pygame.Surface((self.lane_width, self.screen_height), pygame.SRCALPHA)
-            lane_color = (0, 255, 0, 40) if i < 2 else (0, 0, 255, 40)  # Green for left, Blue for right
-            pygame.draw.rect(lane_surface, lane_color, pygame.Rect(0, 0, self.lane_width, self.screen_height))
-            self.screen.blit(lane_surface, (i * self.lane_width, 0))
-            
-            # Draw hit zones (more visible)
-            hit_zone_surface = pygame.Surface((self.lane_width, self.hit_zone_height), pygame.SRCALPHA)
-            hit_zone_color = (0, 255, 0, 80) if i < 2 else (0, 0, 255, 80)
-            pygame.draw.rect(hit_zone_surface, hit_zone_color, pygame.Rect(0, 0, self.lane_width, self.hit_zone_height))
-            self.screen.blit(hit_zone_surface, (i * self.lane_width, self.screen_height - self.hit_zone_height))
-            
-            # Draw lane labels
-            kp_idx = self.lane_keypoint_map.get(i)
-            if kp_idx in KEYPOINT_LABELS:
-                label = KEYPOINT_LABELS[kp_idx]
-                text = self.font_small.render(label, True, COLORS["white"])
-                x = i * self.lane_width + (self.lane_width - text.get_width()) // 2
-                self.screen.blit(text, (x, self.screen_height - self.hit_zone_height + 5))
-        
         # Draw notes
         for note in self.notes:
             note.draw(self.screen)
         
         # Draw hit feedback animations
         current_time = time.time()
-        for hit_x, hit_y, hit_time, lane in self.hit_feedback[:]:
+        for hit_x, hit_y, hit_time, hit_type in self.hit_feedback[:]:
             # Calculate animation progress (0.0 to 1.0)
             elapsed = current_time - hit_time
             if elapsed > self.hit_feedback_duration:
-                self.hit_feedback.remove((hit_x, hit_y, hit_time, lane))
+                self.hit_feedback.remove((hit_x, hit_y, hit_time, hit_type))
                 continue
                 
             progress = elapsed / self.hit_feedback_duration
@@ -332,7 +347,7 @@ class FallingNoteGame:
             alpha = int(255 * (1.0 - progress))  # Fade out
             
             # Draw hit effect
-            color = COLORS["green"] if lane < 2 else COLORS["cyan"]
+            color = COLORS["green"] if hit_type == "hit" else COLORS["red"]
             hit_surface = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
             pygame.draw.circle(hit_surface, (*color, alpha), (size, size), size)
             self.screen.blit(hit_surface, (hit_x - size, hit_y - size))
@@ -391,16 +406,16 @@ class FallingNoteGame:
         self.screen.blit(overlay, (0, 0))
         
         # Title
-        title = self.font_large.render("Falling-Note Rhythm Game", True, COLORS["white"])
+        title = self.font_large.render("Cytus-style Rhythm Game", True, COLORS["white"])
         title_rect = title.get_rect(center=(self.screen_width // 2, 100))
         self.screen.blit(title, title_rect)
         
         # Instructions
         instructions = [
-            "Move your hands to hit the falling notes",
-            "Left Hand controls Lanes 1 & 2",
-            "Right Hand controls Lanes 3 & 4",
-            "Move your palm into a lane when a note reaches the bottom",
+            "Move your hands to hit the notes when their circle shrinks to minimum",
+            "Each note has a judgment circle that shrinks over time",
+            "When the circle is at its smallest, move your hand to the note",
+            "Both Left and Right hands can be used to hit any note",
             "",
             f"Difficulty: {self.difficulty.capitalize()}",
             "",
@@ -437,31 +452,20 @@ class FallingNoteGame:
             self.screen.blit(text, rect)
     
     def spawn_note(self):
-        """Randomly spawn a new note."""
-        if random.random() < self.spawn_rate:
-            lane = random.randint(0, self.num_lanes - 1)
-            x = lane * self.lane_width + (self.lane_width - self.note_width) // 2
-            note = Note(
-                lane=lane,
-                x=x,
-                y=0,
-                width=self.note_width,
-                height=self.note_height,
-                speed=self.note_speed
-            )
-            self.notes.append(note)
+        """Randomly spawn a new note at a random position on screen."""
+        # Generate random position within screen boundaries (with padding)
+        x = random.randint(self.padding, self.screen_width - self.padding)
+        y = random.randint(self.padding, self.screen_height - self.padding)
+        
+        note = Note(
+            x=x,
+            y=y,
+            radius=self.note_radius,
+            max_radius=self.max_radius,
+            duration=self.note_duration
+        )
+        self.notes.append(note)
             
-    def update_notes(self):
-        """Update all active notes."""
-        for note in self.notes[:]:  # Iterate over a copy for safe removal
-            if note.update(self.screen_height):
-                # Note is offscreen or needs to be removed
-                if note.missed and not note.hit:
-                    # Note was missed
-                    self.misses += 1
-                    self.combo = 0
-                self.notes.remove(note)
-    
     def run(self):
         """Run the game loop."""
         try:
@@ -497,13 +501,24 @@ class FallingNoteGame:
                     pose_data = self.framework.process_frame(frame)
                     
                     # Spawn new notes
-                    self.spawn_note()
-                    
-                    # Update notes
-                    self.update_notes()
+                    if random.random() < self.spawn_rate:
+                        self.spawn_note()
                     
                     # Check for hits
                     self.check_hits(pose_data)
+                    
+                    # 更新所有note状态，并移除需要移除的note
+                    # 创建一个要移除的note列表
+                    notes_to_remove = []
+                    for note in self.notes:
+                        # 如果note已经完全淡出或者判定已经完成，可能需要移除
+                        if note.update():
+                            notes_to_remove.append(note)
+                    
+                    # 移除已经完全淡出的note
+                    for note in notes_to_remove:
+                        if note in self.notes:
+                            self.notes.remove(note)
                 
                 # Draw game
                 self.draw_game(camera_frame=frame)
