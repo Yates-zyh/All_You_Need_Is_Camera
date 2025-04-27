@@ -5,7 +5,7 @@ import argparse
 import sys
 
 from aync_camera import __version__
-from aync_camera.games import FallingNoteGame
+from aync_camera.games import CytusStyleGame
 
 
 def parse_args():
@@ -63,7 +63,7 @@ def main():
     print(f"Starting '{args.game}' game with {args.difficulty} difficulty...")
     
     if args.game == "rhythm":
-        game = FallingNoteGame(
+        game = CytusStyleGame(
             camera_id=args.camera, 
             model_path=args.model,
             difficulty=args.difficulty,
