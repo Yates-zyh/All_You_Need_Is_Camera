@@ -48,8 +48,6 @@ datasets/
 htmlcov/
 .pytest_cache/
 
-# 依赖锁定文件
-uv.lock
 
 # 个人笔记
 notes.txt
