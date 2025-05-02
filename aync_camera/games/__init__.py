@@ -1,8 +1,7 @@
 """
-Game modules for the All You Need Is Camera project.
+Game implementations based on the PoseFramework.
 """
+from aync_camera.games.game_config import COLORS, KEYPOINT_LABELS
+from aync_camera.games.rhythm_game import RhythmGame
 
-from aync_camera.games.rhythm_game import CytusStyleGame
-
-# Export classes for easy imports
-__all__ = ["CytusStyleGame"]
+__all__ = ["RhythmGame"]

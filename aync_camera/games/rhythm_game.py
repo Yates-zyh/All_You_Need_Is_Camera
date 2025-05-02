@@ -138,13 +138,13 @@ class Note:
         pygame.draw.circle(screen, COLORS["white"], (self.x, self.y), self.radius, 2)
 
 
-class CytusStyleGame:
+class RhythmGame:
     """Cytus-style Rhythm Game using body pose as controls."""
     
     def __init__(
         self, 
         camera_id: int = 0, 
-        model_path: str = "yolov8n-pose.pt",
+        model_path: str = "yolo11x-pose.pt",
         difficulty: str = "normal",
         screen_width: int = DEFAULT_SCREEN_WIDTH,
         screen_height: int = DEFAULT_SCREEN_HEIGHT

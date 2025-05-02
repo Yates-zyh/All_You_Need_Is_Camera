@@ -5,7 +5,7 @@ import argparse
 import sys
 
 from aync_camera import __version__
-from aync_camera.games import CytusStyleGame
+from aync_camera.games import RhythmGame
 
 
 def parse_args():
@@ -28,8 +28,8 @@ def parse_args():
     parser.add_argument(
         "--model",
         type=str,
-        default="yolov8n-pose.pt",
-        help="Path to YOLOv8-Pose model (default: yolov8n-pose.pt)",
+        default="yolo11x-pose.pt",
+        help="Path to YOLOv8-Pose model (default: yolo11x-pose.pt)",
     )
     parser.add_argument(
         "--difficulty",
@@ -63,7 +63,7 @@ def main():
     print(f"Starting '{args.game}' game with {args.difficulty} difficulty...")
     
     if args.game == "rhythm":
-        game = CytusStyleGame(
+        game = RhythmGame(
             camera_id=args.camera, 
             model_path=args.model,
             difficulty=args.difficulty,
