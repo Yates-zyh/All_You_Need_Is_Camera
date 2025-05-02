@@ -5,8 +5,8 @@ import argparse
 import sys
 
 from aync_camera import __version__
-from aync_camera.games import RhythmGame
-from aync_camera.games.game_config import MUSIC_SHEETS
+from aync_camera.games.rhythm import RhythmGame
+from aync_camera.config.rhythm_config import MUSIC_SHEETS
 
 
 def parse_args():

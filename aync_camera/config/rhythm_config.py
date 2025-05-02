@@ -1,8 +1,8 @@
 """
-Game configuration module for the Falling-Note Rhythm Game.
+节奏游戏配置模块。
 """
 
-# Game difficulty presets
+# 游戏难度预设
 DIFFICULTY_PRESETS = {
     "easy": {
         "spawn_rate": 0.01,
@@ -21,7 +21,7 @@ DIFFICULTY_PRESETS = {
     }
 }
 
-# Default music sheet paths
+# 默认音乐谱面路径
 MUSIC_SHEETS = {
     "earthquake": {
         "easy": "musicsheet/earthquake/earthquake_easy.json",
@@ -35,40 +35,18 @@ MUSIC_SHEETS = {
     }
 }
 
-# Default music sheet to use
+# 默认使用的音乐
 DEFAULT_MUSIC = "earthquake"
 
-# Default lane to keypoint mapping (COCO format)
-# Left Wrist = 9, Right Wrist = 10
+# 默认的轨道到关键点映射（COCO格式）
+# 左手腕 = 9, 右手腕 = 10
 DEFAULT_LANE_KEYPOINT_MAP = {
-    0: 9,   # Left Wrist -> Lane 0
-    1: 9,   # Left Wrist -> Lane 1
-    2: 10,  # Right Wrist -> Lane 2
-    3: 10   # Right Wrist -> Lane 3
+    0: 9,   # 左手 -> 轨道 0
+    1: 9,   # 左手 -> 轨道 1
+    2: 10,  # 右手 -> 轨道 2
+    3: 10   # 右手 -> 轨道 3
 }
 
-# Keypoint labels for display
-KEYPOINT_LABELS = {
-    9: "L Hand",
-    10: "R Hand"
-}
-
-# Game window settings
-DEFAULT_SCREEN_WIDTH = 1280
-DEFAULT_SCREEN_HEIGHT = 720
-
-# Game colors
-COLORS = {
-    "white": (255, 255, 255),
-    "black": (0, 0, 0),
-    "green": (0, 200, 0),
-    "red": (200, 0, 0),
-    "blue": (0, 0, 200),
-    "yellow": (255, 255, 0),
-    "purple": (150, 0, 150),
-    "cyan": (0, 200, 200)
-}
-
-# Scoring system
+# 计分系统
 SCORE_PER_HIT = 10
-COMBO_MULTIPLIER = True  # If True, combo will multiply score
+COMBO_MULTIPLIER = True  # 如果为True，连击会增加得分倍数
