@@ -21,6 +21,23 @@ DIFFICULTY_PRESETS = {
     }
 }
 
+# Default music sheet paths
+MUSIC_SHEETS = {
+    "earthquake": {
+        "easy": "musicsheet/earthquake/earthquake_easy.json",
+        "normal": "musicsheet/earthquake/earthquake_normal.json",
+        "hard": "musicsheet/earthquake/earthquake_hard.json"
+    },
+    "maria": {
+        "easy": "musicsheet/maria/maria_easy.json",
+        "normal": "musicsheet/maria/maria_normal.json",
+        "hard": "musicsheet/maria/maria_hard.json"
+    }
+}
+
+# Default music sheet to use
+DEFAULT_MUSIC = "earthquake"
+
 # Default lane to keypoint mapping (COCO format)
 # Left Wrist = 9, Right Wrist = 10
 DEFAULT_LANE_KEYPOINT_MAP = {

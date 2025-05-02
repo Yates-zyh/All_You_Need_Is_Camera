@@ -6,12 +6,13 @@ import sys
 
 from aync_camera import __version__
 from aync_camera.games import RhythmGame
+from aync_camera.games.game_config import MUSIC_SHEETS
 
 
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="All You Need Is Camera - Interactive Framework using YOLOv8-Pose"
+        description="All You Need Is Camera - Interactive Framework using YOLO11x-Pose"
     )
     parser.add_argument(
         "--version", action="store_true", help="Print version information and exit"
@@ -34,8 +35,19 @@ def parse_args():
     parser.add_argument(
         "--difficulty",
         choices=["easy", "normal", "hard"],
-        default="normal",
-        help="Game difficulty level (default: normal)",
+        default="easy",
+        help="Game difficulty level",
+    )
+    parser.add_argument(
+        "--music",
+        choices=list(MUSIC_SHEETS.keys()),
+        default="earthquake",
+        help="Music to use for rhythm game",
+    )
+    parser.add_argument(
+        "--music-sheet",
+        type=str,
+        help="Custom music sheet JSON file path (overrides --music and --difficulty)"
     )
     parser.add_argument(
         "--width",
@@ -67,8 +79,10 @@ def main():
             camera_id=args.camera, 
             model_path=args.model,
             difficulty=args.difficulty,
+            music=args.music,
             screen_width=args.width,
-            screen_height=args.height
+            screen_height=args.height,
+            music_sheet_path=args.music_sheet
         )
         game.run()
     elif args.game == "fruit_ninja":

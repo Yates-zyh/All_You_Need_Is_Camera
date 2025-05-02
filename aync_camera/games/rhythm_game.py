@@ -15,13 +15,13 @@ from aync_camera.games.game_config import (COLORS, COMBO_MULTIPLIER,
                                           DEFAULT_SCREEN_HEIGHT,
                                           DEFAULT_SCREEN_WIDTH,
                                           DIFFICULTY_PRESETS, KEYPOINT_LABELS,
-                                          SCORE_PER_HIT)
+                                          SCORE_PER_HIT, DEFAULT_MUSIC, MUSIC_SHEETS)
 
 
 class Note:
     """Represents a note with shrinking judgment circle in the rhythm game."""
     
-    def __init__(self, x: int, y: int, radius: int, max_radius: int, duration: float = 2.0):
+    def __init__(self, x: int, y: int, radius: int, max_radius: int, duration: float = 2.0, keypoint_name: str = None):
         """
         Initialize a new note.
         
@@ -31,6 +31,7 @@ class Note:
             radius: Radius of the note itself (inner circle)
             max_radius: Initial radius of the judgment circle (outer circle)
             duration: Time in seconds for judgment circle to shrink completely
+            keypoint_name: Name of the body part this note corresponds to (e.g., "Left Wrist")
         """
         self.x = x
         self.y = y
@@ -48,6 +49,8 @@ class Note:
         self.fade_start_time = None
         self.fade_duration = 1.0  # 消失动画持续1秒
         self.opacity = 255  # 完全不透明
+        # 添加身体部位名称
+        self.keypoint_name = keypoint_name
         
     def update(self):
         """
@@ -118,6 +121,19 @@ class Note:
             # 绘制到屏幕上
             screen.blit(note_surface, (self.x - self.radius, self.y - self.radius))
             screen.blit(border_surface, (self.x - self.radius, self.y - self.radius))
+            
+            # 绘制部位名称（如果有）
+            if self.keypoint_name:
+                font = pygame.font.Font(None, 20)  # 使用小号字体
+                text = font.render(self.keypoint_name, True, (*COLORS["white"][:3], self.opacity))
+                text_rect = text.get_rect(center=(self.radius, self.radius))
+                # 创建文本表面
+                text_surface = pygame.Surface(text.get_size(), pygame.SRCALPHA)
+                text_surface.fill((0, 0, 0, 0))  # 透明背景
+                text_surface.blit(text, (0, 0))
+                # 绘制文本
+                screen.blit(text_surface, (self.x - text_rect.width // 2, self.y + self.radius + 5))
+            
             return
         
         # 正常绘制逻辑
@@ -136,6 +152,13 @@ class Note:
         pygame.draw.circle(screen, color, (self.x, self.y), self.radius)
         # Add border to note circle
         pygame.draw.circle(screen, COLORS["white"], (self.x, self.y), self.radius, 2)
+        
+        # 绘制部位名称（如果有）
+        if self.keypoint_name:
+            font = pygame.font.Font(None, 20)  # 使用小号字体
+            text = font.render(self.keypoint_name, True, COLORS["white"])
+            text_rect = text.get_rect(center=(self.x, self.y + self.radius + 10))
+            screen.blit(text, text_rect)
 
 
 class RhythmGame:
@@ -146,8 +169,10 @@ class RhythmGame:
         camera_id: int = 0, 
         model_path: str = "yolo11x-pose.pt",
         difficulty: str = "normal",
+        music: str = None,
         screen_width: int = DEFAULT_SCREEN_WIDTH,
-        screen_height: int = DEFAULT_SCREEN_HEIGHT
+        screen_height: int = DEFAULT_SCREEN_HEIGHT,
+        music_sheet_path: str = None
     ):
         """
         Initialize the game.
@@ -156,8 +181,11 @@ class RhythmGame:
             camera_id: Camera device ID
             model_path: Path to YOLOv8-Pose model
             difficulty: Game difficulty ('easy', 'normal', 'hard')
+            music: Music name to use (e.g., 'earthquake', 'maria')
             screen_width: Width of the game window
             screen_height: Height of the game window
+            music_sheet_path: Path to JSON file containing beat data (optional)
+                             If provided, overrides music and difficulty
         """
         # Initialize pygame
         pygame.init()
@@ -172,9 +200,8 @@ class RhythmGame:
         self.note_radius = 40  # Inner circle radius
         self.max_radius = 120  # Initial judgment circle radius
         self.acceptance_radius = 70  # How close hand must be to note center to count as hit
-        self.spawn_rate = self.difficulty_settings["spawn_rate"] * 2  # Adjusted for new gameplay
         
-        # 增加note持续时间，减慢圈的缩小速度（原来是5.0减去速度，现在是8.0减去速度）
+        # 增加note持续时间，减慢圈的缩小速度（8.0减去速度）
         self.note_duration = max(3.0, 8.0 - self.difficulty_settings["note_speed"])  
         
         self.confidence_threshold = self.difficulty_settings["confidence_threshold"]
@@ -191,6 +218,23 @@ class RhythmGame:
         
         # Active notes
         self.notes = []
+        
+        # 加载音乐谱面数据
+        self.music = music if music else DEFAULT_MUSIC
+        self.music_sheet_path = music_sheet_path
+        
+        # 如果没有提供谱面路径，使用默认的
+        if not self.music_sheet_path and self.music in MUSIC_SHEETS:
+            self.music_sheet_path = MUSIC_SHEETS[self.music][self.difficulty]
+        
+        self.beat_data = []
+        self.json_keypoint_names = []
+        self.json_keypoint_indices = []
+        self.current_beat_index = 0
+        self.using_json_data = False
+        
+        if self.music_sheet_path:
+            self.load_music_sheet(self.music_sheet_path)
         
         # Hit feedback (visual indicator for successful hits)
         self.hit_feedback = []  # List of (x, y, time, hit_type) tuples for hit animations
@@ -229,6 +273,40 @@ class RhythmGame:
         # Instructions overlay flag
         self.show_instructions = True
         self.instructions_timer = time.time() + 5.0  # Show for 5 seconds
+
+    def load_music_sheet(self, json_path):
+        """
+        Load music sheet data from JSON file.
+        
+        Args:
+            json_path: Path to the JSON file containing music sheet data
+        """
+        import json
+        
+        try:
+            with open(json_path, 'r') as f:
+                data = json.load(f)
+                
+            # 提取节拍数据
+            self.beat_data = data.get('beats', [])
+            
+            # 提取关键点信息
+            self.json_keypoint_names = data.get('keypoint_names', [])
+            self.json_keypoint_indices = data.get('keypoint_indices', [])
+            
+            # 设置使用JSON数据标志
+            self.using_json_data = len(self.beat_data) > 0
+            
+            if self.using_json_data:
+                print(f"成功加载音乐谱面：{json_path}")
+                print(f"共有 {len(self.beat_data)} 个节拍")
+                print(f"关键点名称: {self.json_keypoint_names}")
+            else:
+                print("警告：JSON文件中没有找到有效的节拍数据")
+                
+        except Exception as e:
+            print(f"加载音乐谱面出错: {str(e)}")
+            self.using_json_data = False
 
     def check_hits(self, pose_data):
         """
@@ -465,6 +543,70 @@ class RhythmGame:
             duration=self.note_duration
         )
         self.notes.append(note)
+
+    def spawn_note_from_json(self, elapsed_time):
+        """
+        根据JSON数据和当前经过的时间生成音符
+        
+        Args:
+            elapsed_time: 从游戏开始到现在经过的时间（秒）
+        """
+        # 如果没有加载JSON数据或者已经处理完所有节拍数据，则返回
+        if not self.using_json_data or self.current_beat_index >= len(self.beat_data):
+            return
+            
+        # 获取当前需要处理的节拍
+        while self.current_beat_index < len(self.beat_data):
+            current_beat = self.beat_data[self.current_beat_index]
+            beat_time = current_beat.get('time', 0)
+            
+            # 如果当前时间还没有到达这个节拍的时间，则跳出循环
+            if elapsed_time < beat_time:
+                break
+                
+            # 如果当前时间已经超过了这个节拍的时间，则生成音符
+            keypoints_data = current_beat.get('keypoints', [])
+            
+            # 遍历每个关键点的坐标，如果有有效坐标则生成一个Note
+            for idx, keypoint in enumerate(keypoints_data):
+                # 检查是否有有效的关键点坐标
+                if not keypoint or len(keypoint) == 0:
+                    continue
+                    
+                # 确保坐标有效（不是[0, 0]或空值）
+                if not keypoint[0] or (len(keypoint) > 1 and not keypoint[1]):
+                    continue
+                    
+                # 获取关键点坐标
+                if len(keypoint) == 1:  # 有些JSON文件的格式是[x]而不是[x, y]
+                    x = keypoint[0]
+                    y = 400  # 默认高度，可以调整
+                else:
+                    x = keypoint[0]
+                    y = keypoint[1]
+                
+                # 将坐标调整到屏幕范围内
+                x = min(max(x, self.padding), self.screen_width - self.padding)
+                y = min(max(y, self.padding), self.screen_height - self.padding)
+                
+                # 获取该关键点对应的身体部位名称
+                keypoint_name = None
+                if idx < len(self.json_keypoint_names):
+                    keypoint_name = self.json_keypoint_names[idx]
+                
+                # 创建一个新的Note
+                note = Note(
+                    x=int(x),
+                    y=int(y),
+                    radius=self.note_radius,
+                    max_radius=self.max_radius,
+                    duration=self.note_duration,
+                    keypoint_name=keypoint_name
+                )
+                self.notes.append(note)
+            
+            # 处理完这个节拍后，移动到下一个节拍
+            self.current_beat_index += 1
             
     def run(self):
         """Run the game loop."""
@@ -500,9 +642,9 @@ class RhythmGame:
                     # Process frame
                     pose_data = self.framework.process_frame(frame)
                     
-                    # Spawn new notes
-                    if random.random() < self.spawn_rate:
-                        self.spawn_note()
+                    # 根据JSON数据生成音符
+                    elapsed_time = time.time() - self.game_start_time
+                    self.spawn_note_from_json(elapsed_time)
                     
                     # Check for hits
                     self.check_hits(pose_data)
