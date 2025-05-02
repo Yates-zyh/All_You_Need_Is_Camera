@@ -12,11 +12,11 @@ from ultralytics import YOLO
 
 
 class PoseFramework:
-    """YOLOv8-Pose based framework for human pose detection and tracking."""
+    """YOLOv11x-Pose based framework for human pose detection and tracking."""
 
     def __init__(
         self,
-        model_path: str = "yolov8n-pose.pt",
+        model_path: str = "yolov11x-pose.pt",
         device: Optional[str] = None,
         confidence_threshold: float = 0.5,
         track_buffer_size: int = 10,
@@ -34,7 +34,7 @@ class PoseFramework:
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         print(f"Using device: {self.device}")
 
-        # Load YOLOv8 model
+        # Load YOLO model
         self.model = YOLO(model_path)
         
         # Configuration
@@ -60,7 +60,7 @@ class PoseFramework:
         # Mirror the frame horizontally (flip left-right)
         frame = cv2.flip(frame, 1)
         
-        # Run YOLOv8-Pose inference
+        # Run YOLO11x-Pose inference
         with torch.no_grad():
             results = self.model.predict(
                 frame,
