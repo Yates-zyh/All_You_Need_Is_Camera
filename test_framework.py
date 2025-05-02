@@ -15,7 +15,7 @@ def test_framework():
     # Initialize the framework
     try:
         framework = PoseFramework(
-            model_path="yolov8n-pose.pt",  # Using the smallest model for quick testing
+            model_path="yolo11x-pose.pt",  # Using model for testing
             confidence_threshold=0.5
         )
         print("✓ Framework initialized successfully")

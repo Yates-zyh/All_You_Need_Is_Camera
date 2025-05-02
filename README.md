@@ -1,132 +1,153 @@
 # All You Need Is Camera
 
-一个基于YOLOv8-Pose的摄像头交互框架，让用户通过普通摄像头与游戏进行交互。
+An interactive framework based on YOLOv8-Pose that allows users to interact with games using a standard camera.
 
-## 项目简介
+## Project Overview
 
-"All You Need Is Camera"是一个利用计算机视觉技术，特别是人体姿态估计，让用户能够通过摄像头与游戏交互的框架。本项目使用YOLOv8-Pose模型实时检测用户的姿态，并将姿态数据转换为游戏控制信号。
+"All You Need Is Camera" is a framework that utilizes computer vision technology, specifically human pose estimation, to enable users to interact with games through a camera. This project uses the YOLOv8-Pose model to detect the user's pose in real-time and converts pose data into game control signals.
 
-目前已实现的游戏示例：
-- **Falling-Note Rhythm Game**：类似跳舞毯或音乐节奏游戏，玩家通过移动手脚来击中屏幕上下落的音符。
+Currently implemented game examples:
+- **Falling-Note Rhythm Game**: Similar to dance mats or music rhythm games, players move their hands and feet to hit notes falling on the screen.
 
-## 安装
+## Installation
 
-### 前提条件
+### Prerequisites
 
 - Python 3.10+
-- 支持的操作系统：Windows、macOS、Linux
-- 摄像头（笔记本内置摄像头或USB外接摄像头）
-- 推荐使用GPU进行加速（不是必需的，但能提高性能）
+- Supported operating systems: Windows, macOS, Linux
+- Camera (laptop built-in camera or USB external camera)
+- GPU acceleration recommended (not required, but improves performance)
 
-### 安装步骤
+### Installation Steps
 
-1. 克隆仓库：
+1. Clone the repository:
    ```
    git clone <repository_url>
    cd project
    ```
 
-2. 使用uv安装依赖：
+2. Install dependencies using uv:
    ```
-   uv pip install -e .
+   uv sync
    ```
 
-## 使用方法
+## Usage
 
-### 启动节奏游戏
+### Launch the Rhythm Game
 
-基本启动（使用默认设置）：
+Basic launch (with default settings):
 ```
 python main.py
 ```
 
-指定难度级别：
+Specify difficulty level:
 ```
 python main.py --difficulty easy
 ```
-可选的难度级别：easy（简单）、normal（普通）、hard（困难）。
+Available difficulty levels: easy, normal, hard.
 
-指定摄像头ID（如果有多个摄像头）：
+Specify camera ID (if you have multiple cameras):
 ```
 python main.py --camera 1
 ```
 
-指定自定义YOLOv8-Pose模型：
+Specify a custom YOLOv8-Pose model:
 ```
 python main.py --model path/to/your/model.pt
 ```
 
-调整窗口大小：
+Adjust window size:
 ```
 python main.py --width 1024 --height 768
 ```
 
-### 测试框架
+### Test the Framework
 
-如果想要测试PoseFramework的基本功能而不启动游戏，可以运行：
+If you want to test the basic functionality of PoseFramework without launching a game, run:
 ```
 python test_framework.py
 ```
 
-## 游戏控制
+## Game Controls
 
 ### Falling-Note Rhythm Game
 
-游戏中有四个轨道，分别由不同的身体部位控制：
-- 左脚：控制第1轨道
-- 左手：控制第2轨道
-- 右手：控制第3轨道
-- 右脚：控制第4轨道
+In the game, there are four lanes, each controlled by different body parts:
+- Left hand: Controls lanes 0 and 1
+- Right hand: Controls lanes 2 and 3
 
-当音符落到屏幕底部的绿色区域时，将相应的身体部位移动到该区域以击中音符。连续击中音符将增加连击数，提高得分。
+When notes reach the judgment area, move the corresponding body part to that area to hit the note. Consecutive hits will increase your combo and score.
 
-游戏按键控制：
-- `ESC`：暂停/恢复游戏
-- `P`：暂停/恢复游戏
-- `Q`（在暂停时）：退出游戏
-- `空格`：显示/隐藏游戏说明
+Game key controls:
+- `ESC`: Pause/Resume game
+- `P`: Pause/Resume game
+- `Q` (while paused): Quit game
+- `Space`: Show/Hide game instructions
 
-## 项目结构
+## Project Structure
 
 ```
 project/
-├── aync_camera/             # 主要包目录
-│   ├── core/                # 核心框架组件
-│   │   └── pose_framework.py  # PoseFramework类实现
-│   ├── games/               # 游戏实现
-│   │   ├── game_config.py   # 游戏配置
-│   │   └── rhythm_game.py   # 节奏游戏实现
-│   └── utils/               # 工具函数
-├── main.py                  # 主程序入口
-├── test_framework.py        # 框架测试脚本
-├── requirements.txt         # 项目依赖
-└── README.md                # 项目说明
+├── aync_camera/              # Main package directory
+│   ├── common/               # Common components and base classes
+│   │   └── game_base.py      # Base class for all games
+│   ├── config/               # Configuration modules
+│   │   ├── game_settings.py  # Common game settings
+│   │   └── rhythm_config.py  # Rhythm game specific settings
+│   ├── core/                 # Core framework components
+│   │   └── pose_framework.py # PoseFramework implementation
+│   ├── games/                # Game implementations
+│   │   └── rhythm/           # Rhythm game modules
+│   │       ├── __init__.py   # Main rhythm game class
+│   │       ├── game_logic.py # Game logic implementation
+│   │       ├── note.py       # Note class implementation
+│   │       └── music_sheet_loader.py # Music sheet loading functionality
+│   ├── initialization/       # User and system initialization
+│   └── ui/                   # User interface components
+│       └── rhythm/           # Rhythm game UI
+│           └── renderer.py   # UI rendering for rhythm game
+├── main.py                   # Main program entry
+├── test_framework.py         # Framework test script
+├── requirements.txt          # Project dependencies
+└── README.md                 # Project documentation
 ```
 
-## 技术细节
+## Technical Details
 
-- **姿态检测**：使用YOLOv8-Pose模型检测人体姿态的17个关键点，基于COCO数据集格式。
-- **游戏引擎**：使用Pygame进行游戏开发。
-- **视觉处理**：使用OpenCV处理摄像头输入和图像处理。
+- **Pose Detection**: Uses YOLOv8-Pose model to detect 17 key points of human pose, based on COCO dataset format.
+- **Game Engine**: Uses Pygame for game development.
+- **Visual Processing**: Uses OpenCV for camera input and image processing.
 
-## 未来计划
+## Architecture Design
 
-- 实现更多游戏，如：
-  - Fruit Ninja Clone：使用手部轨迹切水果
-  - Dance Move Comparison：与标准舞蹈动作进行比较和评分
-- 添加多人游戏支持
-- 优化性能，提高检测准确性和响应速度
-- 添加音效和背景音乐
+The project follows a modular architecture with clear separation of concerns:
 
-## 贡献
+1. **Core Framework**: Provides pose detection and tracking capabilities
+2. **Game Base**: Defines common interfaces and functionality for all games
+3. **Game Logic**: Handles game mechanics, rules, and state management
+4. **UI Rendering**: Manages visual presentation and user interface elements
+5. **Configuration**: Stores game settings and parameters separately from code
 
-欢迎贡献代码、报告问题或提出改进建议。
+This architecture makes the code more maintainable and extensible, allowing for easy addition of new games and features.
 
-## 许可证
+## Future Plans
 
-[待定]
+- Implement more games, such as:
+  - Fruit Ninja Clone: Use hand trajectories to slice fruits
+  - Dance Move Comparison: Compare and score against standard dance moves
+- Add multiplayer support
+- Optimize performance, improve detection accuracy and response speed
+- Add sound effects and background music
 
-## 致谢
+## Contributing
 
-- 本项目使用了[Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics)模型进行姿态检测
-- 项目灵感来源于类似体感游戏和交互式健身应用
+Contributions of code, issue reports, or improvement suggestions are welcome.
+
+## License
+
+[TBD]
+
+## Acknowledgments
+
+- This project uses the [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) model for pose detection
+- Project inspiration comes from similar motion-sensing games and interactive fitness applications
