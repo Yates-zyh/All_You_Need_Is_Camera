@@ -38,15 +38,6 @@ MUSIC_SHEETS = {
 # 默认使用的音乐
 DEFAULT_MUSIC = "earthquake"
 
-# 默认的轨道到关键点映射（COCO格式）
-# 左手腕 = 9, 右手腕 = 10
-DEFAULT_LANE_KEYPOINT_MAP = {
-    0: 9,   # 左手 -> 轨道 0
-    1: 9,   # 左手 -> 轨道 1
-    2: 10,  # 右手 -> 轨道 2
-    3: 10   # 右手 -> 轨道 3
-}
-
 # 计分系统
 SCORE_PER_HIT = 10
 COMBO_MULTIPLIER = True  # 如果为True，连击会增加得分倍数

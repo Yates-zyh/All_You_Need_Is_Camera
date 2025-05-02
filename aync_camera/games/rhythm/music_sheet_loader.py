@@ -11,6 +11,7 @@ class MusicSheetLoader:
         self.beat_data = []
         self.keypoint_names = []
         self.keypoint_indices = []
+        self.json_data = {}  # 添加json_data属性
     
     def load_music_sheet(self, json_path):
         """
@@ -24,14 +25,14 @@ class MusicSheetLoader:
         """
         try:
             with open(json_path, 'r') as f:
-                data = json.load(f)
+                self.json_data = json.load(f)
                 
             # 提取节拍数据
-            self.beat_data = data.get('beats', [])
+            self.beat_data = self.json_data.get('beats', [])
             
             # 提取关键点信息
-            self.keypoint_names = data.get('keypoint_names', [])
-            self.keypoint_indices = data.get('keypoint_indices', [])
+            self.keypoint_names = self.json_data.get('keypoint_names', [])
+            self.keypoint_indices = self.json_data.get('keypoint_indices', [])
             
             # 验证数据是否有效
             if len(self.beat_data) > 0:
@@ -48,6 +49,7 @@ class MusicSheetLoader:
             self.beat_data = []
             self.keypoint_names = []
             self.keypoint_indices = []
+            self.json_data = {}  # 重置json_data
             return False
     
     def get_beat_at_time(self, elapsed_time):

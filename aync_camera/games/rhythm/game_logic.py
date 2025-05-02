@@ -3,10 +3,9 @@
 """
 import random
 import time
-from typing import Dict, List, Optional, Tuple, Union
 
-from aync_camera.config.rhythm_config import (COMBO_MULTIPLIER, DEFAULT_LANE_KEYPOINT_MAP,
-                                             DIFFICULTY_PRESETS, SCORE_PER_HIT)
+from aync_camera.config.rhythm_config import (COMBO_MULTIPLIER, 
+                                            DIFFICULTY_PRESETS, SCORE_PER_HIT)
 from aync_camera.games.rhythm.note import Note
 from aync_camera.games.rhythm.music_sheet_loader import MusicSheetLoader
 
@@ -72,13 +71,62 @@ class RhythmGameLogic:
         self.using_music_sheet = False
         self.current_beat_index = 0
         
+        # 坐标映射参数
+        self.scale_factor = 1.0
+        self.offset_x = 0
+        self.offset_y = 0
+        
         # 如果提供了谱面路径，尝试加载
         if self.music_sheet_path:
             self.using_music_sheet = self.music_sheet_loader.load_music_sheet(self.music_sheet_path)
+            # 如果加载成功，计算映射参数
+            if self.using_music_sheet and 'video_info' in self.music_sheet_loader.json_data:
+                self._calculate_mapping_params()
         
         # 游戏开始时间
         self.game_start_time = time.time()
         
+    def _calculate_mapping_params(self):
+        """计算JSON坐标到屏幕坐标的映射参数"""
+        # 获取原始视频尺寸
+        video_info = self.music_sheet_loader.json_data.get('video_info', {})
+        json_video_width = video_info.get('width', self.screen_width)
+        json_video_height = video_info.get('height', self.screen_height)
+        
+        # 计算缩放因子
+        scale_x = self.screen_width / json_video_width
+        scale_y = self.screen_height / json_video_height
+        self.scale_factor = min(scale_x, scale_y)
+        
+        # 计算缩放后的尺寸
+        scaled_width = json_video_width * self.scale_factor
+        scaled_height = json_video_height * self.scale_factor
+        
+        # 计算居中偏移量
+        self.offset_x = (self.screen_width - scaled_width) / 2
+        self.offset_y = (self.screen_height - scaled_height) / 2
+        
+    def _map_coordinates(self, x, y):
+        """
+        将JSON坐标映射到屏幕坐标
+        
+        Args:
+            x: JSON中的X坐标
+            y: JSON中的Y坐标
+            
+        Returns:
+            tuple: (screen_x, screen_y)
+        """
+        # 先应用缩放
+        screen_x = x * self.scale_factor
+        screen_y = y * self.scale_factor
+        
+        # 再应用偏移
+        screen_x += self.offset_x
+        screen_y += self.offset_y
+        
+        return int(screen_x), int(screen_y)
+    
     def reset(self):
         """重置游戏状态。"""
         self.score = 0
@@ -146,6 +194,9 @@ class RhythmGameLogic:
                 else:
                     x = keypoint[0]
                     y = keypoint[1]
+                
+                # 映射坐标到屏幕范围内
+                x, y = self._map_coordinates(x, y)
                 
                 # 调整坐标到屏幕范围内
                 x = min(max(x, self.padding), self.screen_width - self.padding)
