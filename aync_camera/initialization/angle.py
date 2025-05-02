@@ -8,12 +8,14 @@ import cv2
 import numpy as np
 import mediapipe as mp
 
-mp_pose = mp.solutions.pose
-pose = mp_pose.Pose(min_detection_confidence=0.7, min_tracking_confidence=0.7)
-mp_drawing = mp.solutions.drawing_utils
 
-def calculate_3d_angles(landmarks, frame_shape):
+
+def calculate_3d_angles(frame,pose, mp_pose, mp_drawing):
     """计算三维空间三个轴向的倾斜角度"""
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = pose.process(frame_rgb)
+    landmarks = results.pose_landmarks.landmark
+    frame_shape = frame.shape
     h, w = frame_shape[:2]
     angles = {'X': 0, 'Y': 0, 'Z': 0}
     
@@ -94,7 +96,7 @@ def process_video(video_path):
         output_frame = frame.copy()
         
         if results.pose_landmarks:
-            angles = calculate_3d_angles(results.pose_landmarks.landmark, frame.shape)
+            angles = calculate_3d_angles(frame,pose, mp_pose, mp_drawing)
             mp_drawing.draw_landmarks(output_frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
             output_frame = draw_angle_indicator(output_frame, angles)
         else:
@@ -109,5 +111,8 @@ def process_video(video_path):
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
+    mp_pose = mp.solutions.pose
+    pose = mp_pose.Pose(min_detection_confidence=0.7, min_tracking_confidence=0.7)
+    mp_drawing = mp.solutions.drawing_utils
     video_path = '/Users/macbookair/Downloads/IMG_0505.MOV'
     process_video(video_path)

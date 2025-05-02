@@ -4,10 +4,7 @@ import cv2
 import numpy as np
 import mediapipe as mp
 
-# Initialize MediaPipe pose detection
-mp_pose = mp.solutions.pose
-pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
-mp_drawing = mp.solutions.drawing_utils
+
 
 # Function to calculate pixel distance between two keypoints
 def get_pixel_distance(keypoint1, keypoint2):
@@ -20,7 +17,7 @@ def get_pixel_head_toe(landmarks):
     distance = np.linalg.norm(head - toe)
     return distance
 
-def distance_detection(frame_rgb, height=1.7, focal_length=600):
+def distance_detection(frame_rgb, pose, mp_pose, mp_drawing, height=1.7, focal_length=1200):
     """
     Estimate distance from camera using pose landmarks in a single RGB frame.
     
@@ -90,16 +87,14 @@ def convert_pixels_to_meters(pixel_distance, focal_length, sensor_size, image_re
     return real_distance  # In meters
 
 # Function to check if the user is within the optimal camera range (1.5 - 3 meters)
-def check_distance_from_camera(keypoint, frame):
-    distance = get_distance_from_camera(keypoint, frame)
-    
-    # Set a threshold for optimal distance (this is a rough approximation)
-    if distance < 100:  # Too close
-        return f"Move Back | Distance: {distance:.2f} pixels"
-    elif distance > 200:  # Too far
-        return f"Move Closer | Distance: {distance:.2f} pixels"
+def provide_distance_feedback(distance):
+    """Provide feedback based on the user's distance from the camera."""
+    if distance < 1.5:
+        return "Move back. You are too close."
+    elif distance > 3.0:
+        return "Move closer. You are too far."
     else:
-        return f"Good Position | Distance: {distance:.2f} pixels"
+        return "You are at a good distance."
 
 # Main video processing function
 def process_video(video_path):
@@ -114,7 +109,7 @@ def process_video(video_path):
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
         # Process frame for distance detection
-        processed_frame, distance, distance_text = distance_detection(frame_rgb, height=1.7, focal_length=600)
+        processed_frame, distance, distance_text = distance_detection(frame_rgb, pose, mp_pose, mp_drawing, height=1.7, focal_length=1200)
         
         # Display results
         cv2.imshow('Distance Detection', processed_frame)
@@ -127,6 +122,10 @@ def process_video(video_path):
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
+    # Initialize MediaPipe pose detection
+    mp_pose = mp.solutions.pose
+    pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+    mp_drawing = mp.solutions.drawing_utils
     # Example usage
     video_path = '/Users/macbookair/Downloads/IMG_0505.MOV'
     process_video(video_path)
