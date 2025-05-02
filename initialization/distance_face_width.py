@@ -1,3 +1,6 @@
+'''
+does not work for far distances
+'''
 import cv2
 import numpy as np
 import mediapipe as mp

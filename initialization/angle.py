@@ -1,3 +1,9 @@
+'''
+轴	方向	正角度含义	正常范围	可视化颜色
+X	侧向倾斜（左右）	右肩低时为正值	±10°以内	橙色
+Y	前后倾倒	前倾时为正值	±15°以内	绿色
+Z	身体旋转	右转时为正值	±20°以内	蓝色
+'''
 import cv2
 import numpy as np
 import mediapipe as mp

@@ -1,3 +1,4 @@
+'''issues with the rotation and scaling of the pose landmarks, original point isnot centered'''
 import cv2
 import numpy as np
 import mediapipe as mp

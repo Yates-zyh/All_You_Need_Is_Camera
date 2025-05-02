@@ -1,3 +1,5 @@
+'''
+use height and focal length to calculate distance'''
 import cv2
 import numpy as np
 import mediapipe as mp
