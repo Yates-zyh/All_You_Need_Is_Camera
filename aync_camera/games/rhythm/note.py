@@ -111,10 +111,12 @@ class Note:
             screen.blit(note_surface, (self.x - self.radius, self.y - self.radius))
             screen.blit(border_surface, (self.x - self.radius, self.y - self.radius))
             
-            # 绘制部位名称（如果有）
+            # 绘制部位名称（如果有），确保使用英文
             if self.keypoint_name:
                 font = pygame.font.Font(None, 20)  # 使用小号字体
-                text = font.render(self.keypoint_name, True, (*COLORS["white"][:3], self.opacity))
+                # 转换部位名称为显示格式 (例如: "left_wrist" -> "Left Wrist")
+                display_name = self.keypoint_name.replace("_", " ").title()
+                text = font.render(display_name, True, (*COLORS["white"][:3], self.opacity))
                 text_rect = text.get_rect(center=(self.radius, self.radius))
                 # 创建文本表面
                 text_surface = pygame.Surface(text.get_size(), pygame.SRCALPHA)
@@ -142,9 +144,11 @@ class Note:
         # 添加音符圆圈的边框
         pygame.draw.circle(screen, COLORS["white"], (self.x, self.y), self.radius, 2)
         
-        # 绘制部位名称（如果有）
+        # 绘制部位名称（如果有），确保使用英文
         if self.keypoint_name:
             font = pygame.font.Font(None, 20)  # 使用小号字体
-            text = font.render(self.keypoint_name, True, COLORS["white"])
+            # 转换部位名称为显示格式 (例如: "left_wrist" -> "Left Wrist")
+            display_name = self.keypoint_name.replace("_", " ").title()
+            text = font.render(display_name, True, COLORS["white"])
             text_rect = text.get_rect(center=(self.x, self.y + self.radius + 10))
             screen.blit(text, text_rect)

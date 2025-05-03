@@ -247,11 +247,19 @@ class RhythmGameLogic:
         keypoints_conf = person['keypoints_conf']
         
         # 定义所有可用于交互的关键点索引
-        # 包括但不限于手腕，也包括其他可能被用作触发点的关键点
-        # 0: nose, 5: left shoulder, 6: right shoulder, 7: left elbow, 8: right elbow, 
-        # 9: left wrist, 10: right wrist, 11: left hip, 12: right hip,
-        # 13: left knee, 14: right knee, 15: left ankle, 16: right ankle
+        # 0: nose, 5: left_shoulder, 6: right_shoulder, 7: left_elbow, 8: right_elbow, 
+        # 9: left_wrist, 10: right_wrist, 11: left_hip, 12: right_hip,
+        # 13: left_knee, 14: right_knee, 15: left_ankle, 16: right_ankle
         active_keypoints = [0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        
+        # 定义关键点名称以便参考
+        keypoint_names = {
+            0: "nose", 5: "left_shoulder", 6: "right_shoulder", 
+            7: "left_elbow", 8: "right_elbow", 9: "left_wrist", 
+            10: "right_wrist", 11: "left_hip", 12: "right_hip",
+            13: "left_knee", 14: "right_knee", 15: "left_ankle", 
+            16: "right_ankle"
+        }
         
         # 收集所有有效的关键点位置
         keypoint_positions = {}
@@ -265,43 +273,84 @@ class RhythmGameLogic:
                 continue
             
             # 检查音符是否与任何关键点发生碰撞
+            hit = False
+            hit_kp_idx = None  # 记录击中的关键点索引
+            hit_distance = float('inf')  # 记录最近的击中距离
+
+            # 首先检查当前音符需要哪个关键点
+            required_kp_idx = note.keypoint_index
+            required_kp_name = note.keypoint_name
+            
+            # 如果需要特定关键点索引，并且是成对的左右关键点之一，执行镜像映射
+            # COCO关键点对应关系：左右肩(5,6), 左右肘(7,8), 左右腕(9,10), 左右髋(11,12), 左右膝(13,14), 左右踝(15,16)
+            pairs_mapping = {5:6, 6:5, 7:8, 8:7, 9:10, 10:9, 11:12, 12:11, 13:14, 14:13, 15:16, 16:15}
+            
+            # 如果是身体左右对称的关键点，进行镜像映射
+            if required_kp_idx in pairs_mapping:
+                required_kp_idx = pairs_mapping[required_kp_idx]
+            
+            # 同样对关键点名称进行镜像映射
+            if required_kp_name:
+                name_parts = required_kp_name.split('_')
+                if len(name_parts) > 1 and name_parts[0] in ["left", "right"]:
+                    # 交换左右
+                    if name_parts[0] == "left":
+                        name_parts[0] = "right"
+                    else:
+                        name_parts[0] = "left"
+                    required_kp_name = "_".join(name_parts)
+            
             for kp_idx, (px, py) in keypoint_positions.items():
                 # 计算关键点到音符中心的距离
                 distance = ((note.x - px) ** 2 + (note.y - py) ** 2) ** 0.5
                 
                 # 检查关键点是否在音符接受半径内
                 if distance <= self.acceptance_radius:
-                    # 检查关键点是否与音符要求的关键点匹配
-                    if note.keypoint_index is not None and kp_idx != note.keypoint_index:
-                        # 关键点不匹配，继续检查下一个关键点
-                        continue
-                    
-                    # 命中！
-                    self.hits += 1
-                    
-                    # 计算得分（如果启用连击倍率）
-                    hit_score = SCORE_PER_HIT
-                    if COMBO_MULTIPLIER:
-                        hit_score *= max(1, self.combo)
-                    self.score += hit_score
-                    
-                    # 更新连击
-                    self.combo += 1
-                    self.max_combo = max(self.max_combo, self.combo)
-                    
-                    # 标记音符为命中
-                    note.hit = True
-                    note.judged = True  # 标记这个音符已被判定
-                    
-                    # 添加视觉命中反馈
-                    note.hit_feedback_time = time.time()
-                    self.hit_feedback.append((note.x, note.y, note.hit_feedback_time, "hit"))
-                    
-                    # 成功命中后，跳出当前音符的检测循环
-                    break
+                    # 如果音符需要特定关键点
+                    if required_kp_idx is not None:
+                        if kp_idx == required_kp_idx and distance < hit_distance:
+                            hit = True
+                            hit_kp_idx = kp_idx
+                            hit_distance = distance
+                    elif required_kp_name is not None:
+                        # 检查关键点名称是否匹配
+                        keypoint_name = keypoint_names.get(kp_idx)
+                        if keypoint_name == required_kp_name and distance < hit_distance:
+                            hit = True
+                            hit_kp_idx = kp_idx
+                            hit_distance = distance
+                    else:
+                        # 如果音符没有特定要求，任何关键点都可以触发
+                        if distance < hit_distance:
+                            hit = True
+                            hit_kp_idx = kp_idx
+                            hit_distance = distance
+            
+            # 处理命中结果
+            if hit and hit_kp_idx is not None:
+                # 命中！
+                self.hits += 1
+                
+                # 计算得分（如果启用连击倍率）
+                hit_score = SCORE_PER_HIT
+                if COMBO_MULTIPLIER:
+                    hit_score *= max(1, self.combo)
+                self.score += hit_score
+                
+                # 更新连击
+                self.combo += 1
+                self.max_combo = max(self.max_combo, self.combo)
+                
+                # 标记音符为命中
+                note.hit = True
+                note.judged = True  # 标记这个音符已被判定
+                
+                # 添加视觉命中反馈
+                note.hit_feedback_time = time.time()
+                self.hit_feedback.append((note.x, note.y, note.hit_feedback_time, "hit"))
             
             # 检查音符是否被错过（判定时机到达但未被命中）
-            if not note.hit and note.update():
+            elif note.update():
                 # 音符被错过
                 self.misses += 1
                 self.combo = 0
