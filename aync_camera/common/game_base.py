@@ -25,7 +25,7 @@ class GameBase:
         
         Args:
             camera_id: 摄像头设备ID
-            model_path: YOLOv8-Pose模型路径
+            model_path: YOLO11x-Pose模型路径
             screen_width: 游戏窗口宽度
             screen_height: 游戏窗口高度
         """

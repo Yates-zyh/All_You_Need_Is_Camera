@@ -30,7 +30,7 @@ def parse_args():
         "--model",
         type=str,
         default="yolo11x-pose.pt",
-        help="Path to YOLOv8-Pose model (default: yolo11x-pose.pt)",
+        help="Path to model (default: yolo11x-pose.pt)",
     )
     parser.add_argument(
         "--difficulty",

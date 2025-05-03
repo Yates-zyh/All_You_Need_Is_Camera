@@ -1,5 +1,5 @@
 """
-Core pose detection and tracking framework using YOLOv8-Pose.
+Core pose detection and tracking framework using YOLO11X-Pose.
 """
 import time
 from collections import deque
@@ -22,10 +22,10 @@ class PoseFramework:
         track_buffer_size: int = 10,
     ):
         """
-        Initialize the YOLOv8-Pose framework.
+        Initialize the YOLOv11-Pose framework.
 
         Args:
-            model_path: Path to the YOLOv8 pose model weights.
+            model_path: Path to the YOLOv11 pose model weights.
             device: Device to run the model on ('cuda' or 'cpu'). If None, will use cuda if available.
             confidence_threshold: Minimum detection confidence to consider.
             track_buffer_size: Number of past frames to track for trajectory analysis.
@@ -168,52 +168,80 @@ class PoseFramework:
             vis_frame = frame.copy()
         
         for person in pose_data['persons']:
-            # Draw bounding box
-            x1, y1, x2, y2 = map(int, person['bbox'])
-            cv2.rectangle(vis_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            # Define keypoint names for reference
+            keypoint_names = {
+                0: "nose", 5: "left_shoulder", 6: "right_shoulder", 
+                7: "left_elbow", 8: "right_elbow", 9: "left_wrist", 
+                10: "right_wrist", 11: "left_hip", 12: "right_hip",
+                13: "left_knee", 14: "right_knee", 15: "left_ankle", 
+                16: "right_ankle"
+            }
             
-            # Draw ID
-            if person['id'] is not None:
-                cv2.putText(
-                    vis_frame, 
-                    f"ID: {person['id']}", 
-                    (x1, y1 - 10), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 
-                    0.5, 
-                    (0, 255, 0), 
-                    2
-                )
+            # Define keypoint colors for different body parts
+            keypoint_colors = {
+                0: (255, 0, 0),      # nose - blue
+                5: (0, 255, 255),    # left_shoulder - yellow
+                6: (0, 255, 255),    # right_shoulder - yellow
+                7: (0, 128, 255),    # left_elbow - orange
+                8: (0, 128, 255),    # right_elbow - orange
+                9: (0, 255, 255),    # left_wrist - yellow
+                10: (0, 255, 255),   # right_wrist - yellow
+                11: (255, 0, 255),   # left_hip - magenta
+                12: (255, 0, 255),   # right_hip - magenta
+                13: (255, 0, 128),   # left_knee - purple
+                14: (255, 0, 128),   # right_knee - purple
+                15: (128, 0, 255),   # left_ankle - violet
+                16: (128, 0, 255)    # right_ankle - violet
+            }
             
-            # Draw keypoints
+            # Get keypoints
             keypoints = person['keypoints_xy']
             confidences = person['keypoints_conf']
             
-            # COCO keypoint connections (comprehensive skeleton)
-            connections = [
-                (5, 7), (7, 9),     # Left arm
-                (6, 8), (8, 10),    # Right arm
-                (11, 13), (13, 15), # Left leg
-                (12, 14), (14, 16), # Right leg
-                (5, 6),             # Shoulders
-                (5, 11), (6, 12),   # Torso sides
-                (11, 12),           # Hips
-                (0, 1), (1, 2), (2, 3), (3, 4), # Face
-                (0, 5), (0, 6)      # Neck
-            ]
-            
-            # Draw skeleton with thicker lines
-            for i, j in connections:
-                if i < len(keypoints) and j < len(keypoints):
-                    if confidences[i] > 0.5 and confidences[j] > 0.5:
-                        pt1 = tuple(map(int, keypoints[i]))
-                        pt2 = tuple(map(int, keypoints[j]))
-                        cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 3)
-            
-            # Draw all keypoints
+            # Draw each keypoint with its specific color and marker
             for i, (x, y) in enumerate(keypoints):
                 if confidences[i] > 0.5:
-                    # Regular keypoints
-                    cv2.circle(vis_frame, (int(x), int(y)), 4, (0, 0, 255), -1)
+                    # Get color for this keypoint
+                    color = keypoint_colors.get(i, (0, 0, 255))  # default red
+                    
+                    # Draw keypoint with specific style based on body part type
+                    if i == 0:  # nose
+                        # Draw nose as diamond
+                        points = np.array([
+                            [x, y-6], [x+6, y], [x, y+6], [x-6, y]
+                        ], np.int32)
+                        cv2.polylines(vis_frame, [points], True, color, 2)
+                    elif i in [5, 6]:  # shoulders
+                        # Draw shoulders as squares
+                        cv2.rectangle(vis_frame, (int(x)-5, int(y)-5), (int(x)+5, int(y)+5), color, 2)
+                    elif i in [9, 10]:  # wrists
+                        # Wrists are handled separately below, just draw a small point here
+                        cv2.circle(vis_frame, (int(x), int(y)), 4, color, -1)
+                    elif i in [15, 16]:  # ankles
+                        # Draw ankles as triangles
+                        points = np.array([
+                            [x, y-7], [x+7, y+7], [x-7, y+7]
+                        ], np.int32)
+                        cv2.fillPoly(vis_frame, [points], color)
+                    else:  # all other keypoints
+                        # Draw as circles
+                        cv2.circle(vis_frame, (int(x), int(y)), 4, color, -1)
+                    
+                    # Add keypoint label
+                    if i not in [9, 10]:  # Don't add labels for wrists here (done separately)
+                        label = keypoint_names.get(i, f"kp{i}")
+                        # Only show shortened labels to avoid clutter
+                        label_parts = label.split('_')
+                        short_label = label_parts[0][0] + "_" + label_parts[1][0] if len(label_parts) > 1 else label[0]
+                        cv2.putText(
+                            vis_frame,
+                            short_label,
+                            (int(x) + 5, int(y) - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.4,
+                            color,
+                            1
+                        )
             
             # Highlight palm positions (wrists) with special markers
             if highlight_palms:
@@ -227,8 +255,8 @@ class PoseFramework:
                         # Draw cross inside
                         cv2.line(vis_frame, (x-10, y), (x+10, y), (0, 255, 255), 2)
                         cv2.line(vis_frame, (x, y-10), (x, y+10), (0, 255, 255), 2)
-                        # Add label
-                        label = "Left Palm" if idx == 9 else "Right Palm"
+                        # Add label in English
+                        label = "Left Wrist" if idx == 9 else "Right Wrist"
                         cv2.putText(
                             vis_frame,
                             label,
