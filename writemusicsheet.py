@@ -56,7 +56,7 @@ import librosa
 import tqdm
 
 class MusicSheetGenerator:
-    def __init__(self, video_path):
+    def __init__(self, video_path, beat_sample_rate=1.0, hop_length=512):
         print("Initializing Dance Beat Pose Extraction System...")
         
         # Initialize YOLO11Pose model
@@ -81,6 +81,10 @@ class MusicSheetGenerator:
         # Extract audio file
         self.audio_path = self.extract_audio()
         
+        # Beat detection parameters
+        self.beat_sample_rate = beat_sample_rate  # 节拍采样率：1.0表示使用所有检测到的节拍，0.5表示每两个节拍取一个
+        self.hop_length = hop_length  # librosa参数，影响节拍检测的精度，较小值会检测到更多节拍
+        
         # Beat detection results
         self.beat_frames = []
         self.tempo = 0
@@ -90,9 +94,9 @@ class MusicSheetGenerator:
         
         # Define keypoint names
         self.keypoint_names = [
-            "Nose", "Left Eye", "Right Eye", "Left Ear", "Right Ear", 
-            "Left Shoulder", "Right Shoulder", "Left Elbow", "Right Elbow", "Left Wrist", "Right Wrist",
-            "Left Hip", "Right Hip", "Left Knee", "Right Knee", "Left Ankle", "Right Ankle"
+            "Nose", "Right Eye", "Left Eye", "Right Ear", "Left Ear", 
+            "Right Shoulder", "Left Shoulder", "Right Elbow", "Left Elbow", "Right Wrist", "Left Wrist",
+            "Right Hip", "Left Hip", "Right Knee", "Left Knee", "Right Ankle", "Left Ankle"
         ]
         
         # Beat pose storage
@@ -188,21 +192,30 @@ class MusicSheetGenerator:
             y, sr = librosa.load(self.audio_path)
             
             # Extract tempo and beat frames
-            tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+            tempo, beats = librosa.beat.beat_track(y=y, sr=sr, hop_length=self.hop_length)
             # Store tempo as a float, not a numpy array
             self.tempo = float(tempo)
             
             # Convert beat frames to timestamps
-            beat_times = librosa.frames_to_time(beats, sr=sr)
+            beat_times = librosa.frames_to_time(beats, sr=sr, hop_length=self.hop_length)
             
             # Convert beat times to video frame numbers
             frame_numbers = np.round(beat_times * self.fps).astype(int)
             
+            # Apply beat sample rate if different from default
+            if self.beat_sample_rate != 1.0:
+                # Calculate sampling interval based on beat_sample_rate
+                sample_interval = max(1, int(1/self.beat_sample_rate))
+                sampled_frame_numbers = frame_numbers[::sample_interval]
+                print(f"Applied beat sampling rate {self.beat_sample_rate} (taking 1 beat every {sample_interval})")
+            else:
+                sampled_frame_numbers = frame_numbers
+            
             # Convert to Python list to avoid NumPy array boolean issues
-            self.beat_frames = frame_numbers.tolist()
+            self.beat_frames = sampled_frame_numbers.tolist()
             
             print(f"Detected tempo: {self.tempo:.2f} BPM")
-            print(f"Found {len(self.beat_frames)} beats")
+            print(f"Found {len(frame_numbers)} total beats, using {len(self.beat_frames)} after sampling")
             
             return self.beat_frames
             
@@ -453,6 +466,36 @@ def main():
         print(f"Error: Video file {video_path} does not exist")
         return
     
+    # Get beat sampling rate
+    while True:
+        beat_sample_rate_str = input("Enter beat sampling rate (default 1.0, lower values = fewer beats, e.g. 0.5): ")
+        if beat_sample_rate_str == "":
+            beat_sample_rate = 1.0
+            break
+        try:
+            beat_sample_rate = float(beat_sample_rate_str)
+            if beat_sample_rate <= 0:
+                print("Error: Beat sampling rate must be positive")
+            else:
+                break
+        except ValueError:
+            print("Error: Please enter a valid number")
+    
+    # Get hop_length for librosa
+    while True:
+        hop_length_str = input("Enter hop_length for beat detection (default 512, lower values detect more beats): ")
+        if hop_length_str == "":
+            hop_length = 512
+            break
+        try:
+            hop_length = int(hop_length_str)
+            if hop_length <= 0:
+                print("Error: hop_length must be positive")
+            else:
+                break
+        except ValueError:
+            print("Error: Please enter a valid integer")
+    
     # Extract video filename without extension
     video_basename = os.path.basename(video_path)
     video_name = os.path.splitext(video_basename)[0]
@@ -462,7 +505,7 @@ def main():
     print(f"Output will be saved in: musicsheet/{video_name}/")
     
     # Create and run generator
-    generator = MusicSheetGenerator(video_path)
+    generator = MusicSheetGenerator(video_path, beat_sample_rate, hop_length)
     result = generator.run(output_path)
     
     if result:
@@ -474,4 +517,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
