@@ -1,9 +1,9 @@
 """
-Core pose detection and tracking framework using YOLOv8-Pose.
+Core pose detection and tracking framework using YOLO11X-Pose.
 """
 import time
 from collections import deque
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional
 
 import cv2
 import numpy as np
@@ -12,20 +12,20 @@ from ultralytics import YOLO
 
 
 class PoseFramework:
-    """YOLOv8-Pose based framework for human pose detection and tracking."""
+    """YOLOv11x-Pose based framework for human pose detection and tracking."""
 
     def __init__(
         self,
-        model_path: str = "yolov8n-pose.pt",
+        model_path: str = "yolov11x-pose.pt",
         device: Optional[str] = None,
         confidence_threshold: float = 0.5,
         track_buffer_size: int = 10,
     ):
         """
-        Initialize the YOLOv8-Pose framework.
+        Initialize the YOLOv11-Pose framework.
 
         Args:
-            model_path: Path to the YOLOv8 pose model weights.
+            model_path: Path to the YOLOv11 pose model weights.
             device: Device to run the model on ('cuda' or 'cpu'). If None, will use cuda if available.
             confidence_threshold: Minimum detection confidence to consider.
             track_buffer_size: Number of past frames to track for trajectory analysis.
@@ -34,7 +34,7 @@ class PoseFramework:
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         print(f"Using device: {self.device}")
 
-        # Load YOLOv8 model
+        # Load YOLO model
         self.model = YOLO(model_path)
         
         # Configuration
@@ -43,6 +43,9 @@ class PoseFramework:
         
         # Tracking state
         self.tracked_poses = {}  # Dictionary to store state per tracked ID
+        
+        # Camera attribute (will be set when setup_camera is called)
+        self.camera = None
         
     def process_frame(self, frame: np.ndarray) -> Dict:
         """
@@ -57,10 +60,13 @@ class PoseFramework:
         # Record timestamp
         current_time = time.time()
         
-        # Mirror the frame horizontally (flip left-right)
+        # Store the original frame for UI rendering
+        original_frame = frame.copy()
+        
+        # Mirror the frame horizontally (flip left-right) for processing
         frame = cv2.flip(frame, 1)
         
-        # Run YOLOv8-Pose inference
+        # Run YOLO11x-Pose inference
         with torch.no_grad():
             results = self.model.predict(
                 frame,
@@ -108,17 +114,12 @@ class PoseFramework:
                     if person_data['confidence'] > self.confidence_threshold:
                         detected_persons.append(person_data)
         
-        # Simple tracking (Just for trajectory tracking in MVP)
-        # In a more complete implementation, we would use a proper tracker like SORT/DeepSORT
         updated_tracked_poses = {}
         
         # For each detected person, try to match with existing tracks
         for i, person in enumerate(detected_persons):
-            # For simplicity in MVP, we track the first person as ID 1
-            # In a real application, we'd match based on IoU or feature similarity
             track_id = 1 if i == 0 else i + 1
             
-            # Initialize track if new
             if track_id not in self.tracked_poses:
                 self.tracked_poses[track_id] = {
                     'keypoints_history': deque(maxlen=self.track_buffer_size)
@@ -142,7 +143,8 @@ class PoseFramework:
         framework_output = {
             'timestamp': current_time,
             'persons': detected_persons,
-            'mirrored_frame': frame  # Include the mirrored frame in the output
+            'mirrored_frame': frame,       # The mirrored frame for pose display
+            'original_frame': original_frame  # The original frame for UI rendering
         }
         
         return framework_output
@@ -256,8 +258,7 @@ class PoseFramework:
         
         return vis_frame
     
-    @staticmethod
-    def setup_camera(camera_id: int = 0, width: int = 1280, height: int = 720) -> cv2.VideoCapture:
+    def setup_camera(self, camera_id: int = 0, width: int = 1920, height: int = 1080) -> None:
         """
         Set up and configure a camera for capturing.
         
@@ -265,16 +266,20 @@ class PoseFramework:
             camera_id: Camera device ID.
             width: Desired frame width.
             height: Desired frame height.
-            
-        Returns:
-            Configured VideoCapture object.
         """
-        cap = cv2.VideoCapture(camera_id)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        self.camera = cv2.VideoCapture(camera_id)
+        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         
         # Check if camera opened successfully
-        if not cap.isOpened():
+        if not self.camera.isOpened():
             raise RuntimeError(f"Failed to open camera with ID {camera_id}")
             
-        return cap
+    def release(self) -> None:
+        """
+        Release the camera and other resources.
+        This method should be called when the application ends.
+        """
+        if self.camera is not None:
+            self.camera.release()
+            self.camera = None
