@@ -1,9 +1,9 @@
-"""
-节奏游戏主模块。
-"""
 import time
 import pygame
 import logging
+import os
+import subprocess
+import tempfile
 
 from aync_camera.common.game_base import GameBase
 from aync_camera.games.rhythm.game_logic import RhythmGameLogic
@@ -12,10 +12,14 @@ from aync_camera.ui.rhythm.renderer import (RhythmGameRenderer, START_SCREEN,
                                            PAUSED, GAME_OVER)
 from aync_camera.config.rhythm_config import MUSIC_SHEETS, DEFAULT_MUSIC
 
+# 初始化pygame音频
+pygame.mixer.init()
+
 # Configure simple logging to track state transitions
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("RhythmGame")
+
 
 class RhythmGame(GameBase):
     """节奏游戏，使用身体姿态作为控制。"""
@@ -68,6 +72,16 @@ class RhythmGame(GameBase):
         self.countdown_start_time = None
         self.game_start_time = None
         
+        # 音频相关属性
+        self.audio_path = None
+        self.audio_extracted = False
+        self.audio_playing = False
+        
+        # 游戏结束标志
+        self.game_finished = False
+        self.remaining_notes = 0
+        self.last_note_time = 0
+        
         # 创建UI渲染器实例
         self.ui_renderer = RhythmGameRenderer(
             screen_width=screen_width,
@@ -93,8 +107,123 @@ class RhythmGame(GameBase):
         if self.game_logic.using_music_sheet:
             logger.info(f"Music sheet loaded successfully: {self.game_logic.music_sheet_path}")
             logger.info(f"Number of beats: {len(self.game_logic.music_sheet_loader.beat_data) if self.game_logic.music_sheet_loader.beat_data else 0}")
+            
+            # 获取最后一个音符的时间
+            if self.game_logic.music_sheet_loader.beat_data:
+                self.last_note_time = self.game_logic.music_sheet_loader.beat_data[-1].get('time', 0) + 3  # 加3秒额外时间
+                self.remaining_notes = len(self.game_logic.music_sheet_loader.beat_data)
         else:
             logger.warning(f"Failed to load music sheet: {self.music_sheet_path}")
+    
+    def extract_audio(self):
+        """
+        从视频中提取音频。
+        
+        Returns:
+            bool: 提取成功返回True，否则返回False
+        """
+        try:
+            logger.info(f"Extracting audio for {self.music}")
+            
+            # 获取视频路径
+            video_path = f"example_video/{self.music}.mp4"
+            if not os.path.exists(video_path):
+                logger.error(f"Video file not found: {video_path}")
+                return False
+            
+            # 创建音频文件
+            self.audio_path = f"{self.music}_audio.wav"
+            
+            # 使用ffmpeg提取音频
+            ffmpeg_cmd = [
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-vn", "-acodec", "pcm_s16le",
+                "-ar", "44100", "-ac", "2",
+                self.audio_path
+            ]
+            
+            logger.info(f"Running ffmpeg command: {' '.join(ffmpeg_cmd)}")
+            
+            # 执行命令
+            process = subprocess.Popen(
+                ffmpeg_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True
+            )
+            
+            # 等待进程完成
+            stdout, stderr = process.communicate()
+            
+            # 检查结果
+            if process.returncode != 0:
+                logger.error(f"Audio extraction failed: {stderr}")
+                return False
+            
+            if not os.path.exists(self.audio_path) or os.path.getsize(self.audio_path) == 0:
+                logger.error(f"Output audio file is missing or empty: {self.audio_path}")
+                return False
+            
+            logger.info(f"Audio extracted successfully to {self.audio_path}")
+            self.audio_extracted = True
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error extracting audio: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def play_audio(self):
+        """播放提取的音频"""
+        if not self.audio_extracted or not self.audio_path or not os.path.exists(self.audio_path):
+            logger.warning("Cannot play audio: audio not extracted or file not found")
+            return False
+        
+        try:
+            # 停止当前正在播放的音频
+            pygame.mixer.music.stop()
+            
+            # 加载并播放新音频
+            pygame.mixer.music.load(self.audio_path)
+            pygame.mixer.music.play()
+            self.audio_playing = True
+            logger.info(f"Playing audio: {self.audio_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Error playing audio: {e}")
+            self.audio_playing = False
+            return False
+    
+    def cleanup_audio(self):
+        """清理提取的音频文件"""
+        if self.audio_path and os.path.exists(self.audio_path):
+            try:
+                # 首先停止音乐播放
+                pygame.mixer.music.stop()
+                self.audio_playing = False
+                
+                # 确保音频资源完全释放
+                pygame.mixer.music.unload()
+                
+                # 添加小延迟以确保资源释放
+                time.sleep(0.1)
+                
+                # 现在尝试删除文件
+                os.remove(self.audio_path)
+                logger.info(f"Removed audio file: {self.audio_path}")
+                self.audio_path = None
+                self.audio_extracted = False
+                return True
+            except Exception as e:
+                logger.error(f"Error cleaning up audio: {e}")
+                # 即使删除失败也将状态重置，防止重复尝试删除
+                self.audio_playing = False
+                self.audio_path = None
+                self.audio_extracted = False
+                return False
+        return True
     
     def process_input(self, events):
         """
@@ -108,27 +237,42 @@ class RhythmGame(GameBase):
         """
         for event in events:
             if event.type == pygame.QUIT:
+                self.cleanup_audio()
                 return True
                 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     if self.game_state == PLAYING:
                         self.game_state = PAUSED
+                        # 暂停音乐
+                        if self.audio_playing:
+                            pygame.mixer.music.pause()
                     elif self.game_state == PAUSED:
                         self.game_state = PLAYING
+                        # 继续播放音乐
+                        if self.audio_playing:
+                            pygame.mixer.music.unpause()
                     elif self.game_state == START_SCREEN or self.game_state == SONG_SELECTION:
+                        self.cleanup_audio()
                         return True
                 elif event.key == pygame.K_p and self.game_state == PLAYING:
                     self.game_state = PAUSED
+                    if self.audio_playing:
+                        pygame.mixer.music.pause()
                 elif event.key == pygame.K_p and self.game_state == PAUSED:
                     self.game_state = PLAYING
+                    if self.audio_playing:
+                        pygame.mixer.music.unpause()
                 elif event.key == pygame.K_q and self.game_state == PAUSED:
+                    self.cleanup_audio()
                     return True
                 elif event.key == pygame.K_SPACE and self.game_state == PLAYING:
                     self.ui_renderer.toggle_instructions()
-                # Test shortcut to start gameplay directly from any screen
+                # 测试快捷键，直接开始游戏
                 elif event.key == pygame.K_F5:
                     logger.info("Debug shortcut: Starting game directly")
+                    if not self.audio_extracted:
+                        self.extract_audio()
                     self.countdown_start_time = time.time()
                     self.game_state = COUNTDOWN
                 # 添加镜像模式切换按键M
@@ -141,6 +285,16 @@ class RhythmGame(GameBase):
                     self._handle_difficulty_selection(event.pos)
                 elif self.game_state == SONG_SELECTION:
                     self._handle_song_selection(event.pos)
+                elif self.game_state == GAME_OVER:
+                    if hasattr(self.ui_renderer, 'restart_button') and self.ui_renderer.restart_button.collidepoint(event.pos):
+                        # 重新选择歌曲
+                        self.cleanup_audio()
+                        self.game_state = SONG_SELECTION
+                        logger.info("Restarting game: returning to song selection")
+                    elif hasattr(self.ui_renderer, 'exit_button') and self.ui_renderer.exit_button.collidepoint(event.pos):
+                        # 退出游戏
+                        self.cleanup_audio()
+                        return True
         
         return False
     
@@ -158,6 +312,11 @@ class RhythmGame(GameBase):
                 # 重新创建游戏逻辑实例，确保使用正确的难度和谱面
                 self.create_game_logic()
                 
+                # 提取音频
+                if not self.audio_extracted:
+                    if not self.extract_audio():
+                        logger.error("Failed to extract audio, continuing without audio")
+                
                 # 开始倒计时
                 self.countdown_start_time = time.time()
                 self.game_state = COUNTDOWN
@@ -170,10 +329,15 @@ class RhythmGame(GameBase):
             if rect.collidepoint(mouse_pos):
                 logger.info(f"Song selected: {song}")
                 self.music = song
+                
+                # 清理之前的音频
+                self.cleanup_audio()
+                
                 # 更新谱面路径
                 if self.music in MUSIC_SHEETS:
                     self.music_sheet_path = MUSIC_SHEETS[self.music][self.difficulty]
                     logger.info(f"Updated music sheet path: {self.music_sheet_path}")
+                
                 # 进入难度选择
                 self.game_state = START_SCREEN
                 logger.info(f"State transition: SONG_SELECTION -> START_SCREEN")
@@ -210,6 +374,10 @@ class RhythmGame(GameBase):
                             logger.info("Music sheet loaded successfully")
                             if 'video_info' in self.game_logic.music_sheet_loader.json_data:
                                 self.game_logic._calculate_mapping_params()
+                
+                # 开始播放音频
+                if self.audio_extracted and not self.audio_playing:
+                    self.play_audio()
         
         elif self.game_state == PLAYING and pose_data is not None:
             # 游戏进行中的逻辑
@@ -229,6 +397,19 @@ class RhythmGame(GameBase):
             
             # 更新游戏逻辑
             self.game_logic.update(elapsed_time)
+            
+            # 检查游戏是否结束
+            if self.game_logic.using_music_sheet:
+                # 所有音符已生成且没有活跃音符
+                if (self.game_logic.current_beat_index >= len(self.game_logic.music_sheet_loader.beat_data) and
+                    len(self.game_logic.notes) == 0 and
+                    elapsed_time > self.last_note_time):
+                    self.game_state = GAME_OVER
+                    logger.info(f"State transition: PLAYING -> GAME_OVER")
+            elif not pygame.mixer.music.get_busy() and self.audio_playing:
+                # 音乐播放完毕
+                self.game_state = GAME_OVER
+                logger.info(f"State transition: PLAYING -> GAME_OVER (music ended)")
     
     def render(self, screen, camera_frame=None):
         """
@@ -285,6 +466,17 @@ class RhythmGame(GameBase):
             
             # 绘制暂停屏幕
             self.ui_renderer.render_pause_screen(screen)
+            
+        elif self.game_state == GAME_OVER:
+            # 渲染游戏结束画面
+            if self.game_logic:
+                self.ui_renderer.render_game_over_screen(
+                    screen, 
+                    self.game_logic.score, 
+                    self.game_logic.hits, 
+                    self.game_logic.misses, 
+                    self.game_logic.max_combo
+                )
     
     def run(self):
         """游戏主循环。"""
@@ -328,5 +520,6 @@ class RhythmGame(GameBase):
             pygame.time.Clock().tick(60)
         
         # 游戏结束，释放资源
+        self.cleanup_audio()
         self.framework.release()
         pygame.quit()

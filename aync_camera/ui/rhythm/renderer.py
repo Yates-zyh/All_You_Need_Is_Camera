@@ -424,3 +424,69 @@ class RhythmGameRenderer:
     def toggle_mirror_mode(self):
         """Toggle mirror mode."""
         self.mirror_mode = not self.mirror_mode
+
+    def render_game_over_screen(self, screen, final_score, hits, misses, max_combo):
+        """
+        Render the game over screen.
+        
+        Args:
+            screen: Pygame screen object
+            final_score: Final game score
+            hits: Number of successful hits
+            misses: Number of misses
+            max_combo: Maximum combo achieved
+        """
+        # Semi-transparent overlay
+        overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))  # Black with transparency
+        screen.blit(overlay, (0, 0))
+        
+        # Title
+        title = self.font_large.render("GAME OVER", True, COLORS["white"])
+        title_rect = title.get_rect(center=(self.screen_width // 2, 120))
+        screen.blit(title, title_rect)
+        
+        # Score and statistics
+        score_text = self.font_large.render(f"Score: {final_score}", True, COLORS["yellow"])
+        score_rect = score_text.get_rect(center=(self.screen_width // 2, 200))
+        screen.blit(score_text, score_rect)
+        
+        stats_text = self.font_medium.render(
+            f"Hits: {hits}   Misses: {misses}   Max Combo: {max_combo}", 
+            True, 
+            COLORS["white"]
+        )
+        stats_rect = stats_text.get_rect(center=(self.screen_width // 2, 260))
+        screen.blit(stats_text, stats_rect)
+        
+        # Draw restart button
+        restart_button = pygame.Rect(
+            self.screen_width // 2 - 150, 
+            self.screen_height // 2 + 50, 
+            300, 
+            60
+        )
+        pygame.draw.rect(screen, COLORS["green"], restart_button, border_radius=10)
+        pygame.draw.rect(screen, COLORS["white"], restart_button, 2, border_radius=10)  # Border
+        
+        restart_text = self.font_medium.render("Select New Song", True, COLORS["black"])
+        restart_rect = restart_text.get_rect(center=restart_button.center)
+        screen.blit(restart_text, restart_rect)
+        
+        # Draw exit button
+        exit_button = pygame.Rect(
+            self.screen_width // 2 - 150, 
+            self.screen_height // 2 + 130, 
+            300, 
+            60
+        )
+        pygame.draw.rect(screen, COLORS["red"], exit_button, border_radius=10)
+        pygame.draw.rect(screen, COLORS["white"], exit_button, 2, border_radius=10)  # Border
+        
+        exit_text = self.font_medium.render("Exit Game", True, COLORS["white"])
+        exit_rect = exit_text.get_rect(center=exit_button.center)
+        screen.blit(exit_text, exit_rect)
+        
+        # Store button positions for click handling
+        self.restart_button = restart_button
+        self.exit_button = exit_button
