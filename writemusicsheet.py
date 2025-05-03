@@ -94,9 +94,9 @@ class MusicSheetGenerator:
         
         # Define keypoint names
         self.keypoint_names = [
-            "Nose", "Left Eye", "Right Eye", "Left Ear", "Right Ear", 
-            "Left Shoulder", "Right Shoulder", "Left Elbow", "Right Elbow", "Left Wrist", "Right Wrist",
-            "Left Hip", "Right Hip", "Left Knee", "Right Knee", "Left Ankle", "Right Ankle"
+            "Nose", "Right Eye", "Left Eye", "Right Ear", "Left Ear", 
+            "Right Shoulder", "Left Shoulder", "Right Elbow", "Left Elbow", "Right Wrist", "Left Wrist",
+            "Right Hip", "Left Hip", "Right Knee", "Left Knee", "Right Ankle", "Left Ankle"
         ]
         
         # Beat pose storage
