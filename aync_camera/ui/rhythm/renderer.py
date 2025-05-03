@@ -381,16 +381,13 @@ class RhythmGameRenderer:
         
         # If a camera frame is provided, use it as the background
         if camera_frame is not None:
-            # Get the appropriate frame based on mirror mode
-            if 'original_frame' in camera_frame and not self.mirror_mode:
-                # Use original frame when mirror mode is off
-                display_frame = camera_frame['original_frame']
-            elif 'mirrored_frame' in camera_frame and self.mirror_mode:
-                # Use mirrored frame when mirror mode is on
-                display_frame = camera_frame['mirrored_frame']
+            # Apply horizontal flip to create mirror effect
+            # Always use mirrored frame for countdown to help with user orientation
+            if isinstance(camera_frame, dict) and 'original_frame' in camera_frame:
+                display_frame = cv2.flip(camera_frame['original_frame'], 1)  # 1 means horizontal flip
             else:
-                # Fallback to direct frame if neither is available
-                display_frame = camera_frame
+                # If we got a direct frame, flip it
+                display_frame = cv2.flip(camera_frame, 1)
                 
             # Resize to fit the screen
             display_frame = cv2.resize(display_frame, (self.screen_width, self.screen_height))

@@ -17,15 +17,15 @@ class GameBase:
         self, 
         camera_id: int = 0, 
         model_path: str = "yolo11x-pose.pt",
-        screen_width: int = 1280,
-        screen_height: int = 720
+        screen_width: int = 1920,
+        screen_height: int = 1080
     ):
         """
         初始化游戏基类。
         
         Args:
             camera_id: 摄像头设备ID
-            model_path: YOLOv8-Pose模型路径
+            model_path: YOLO11x-Pose模型路径
             screen_width: 游戏窗口宽度
             screen_height: 游戏窗口高度
         """

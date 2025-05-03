@@ -8,7 +8,7 @@ from aync_camera.config.game_settings import COLORS
 class Note:
     """表示节奏游戏中带有收缩判定圈的音符。"""
     
-    def __init__(self, x: int, y: int, radius: int, max_radius: int, duration: float = 2.0, keypoint_name: str = None):
+    def __init__(self, x: int, y: int, radius: int, max_radius: int, duration: float = 2.0, keypoint_name: str = None, keypoint_index: int = None):
         """
         初始化一个新的音符。
         
@@ -19,6 +19,7 @@ class Note:
             max_radius: 判定圈的初始半径（外圈）
             duration: 判定圈完全收缩所需的时间（秒）
             keypoint_name: 这个音符对应的身体部位名称（例如，"Left Wrist"）
+            keypoint_index: 这个音符对应的关键点索引（例如，9表示左手腕）
         """
         self.x = x
         self.y = y
@@ -34,10 +35,11 @@ class Note:
         # 添加渐隐效果相关属性
         self.fade_out = False
         self.fade_start_time = None
-        self.fade_duration = 1.0  # 消失动画持续1秒
+        self.fade_duration = 0.5  # 消失动画持续0.5秒 (原值为1.0秒)
         self.opacity = 255  # 完全不透明
-        # 添加身体部位名称
+        # 添加身体部位名称和索引
         self.keypoint_name = keypoint_name
+        self.keypoint_index = keypoint_index
         
     def update(self):
         """

@@ -30,7 +30,7 @@ def parse_args():
         "--model",
         type=str,
         default="yolo11x-pose.pt",
-        help="Path to YOLOv8-Pose model (default: yolo11x-pose.pt)",
+        help="Path to model (default: yolo11x-pose.pt)",
     )
     parser.add_argument(
         "--difficulty",
@@ -52,14 +52,14 @@ def parse_args():
     parser.add_argument(
         "--width",
         type=int,
-        default=1280,
-        help="Game window width (default: 1280)",
+        default=1920,
+        help="Game window width (default: 1920)",
     )
     parser.add_argument(
         "--height",
         type=int,
-        default=720,
-        help="Game window height (default: 720)",
+        default=1080,
+        help="Game window height (default: 1080)",
     )
     return parser.parse_args()
 

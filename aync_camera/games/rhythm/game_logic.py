@@ -16,8 +16,8 @@ class RhythmGameLogic:
     def __init__(
         self, 
         difficulty: str = "normal",
-        screen_width: int = 1280,
-        screen_height: int = 720,
+        screen_width: int = 1920,
+        screen_height: int = 1080,
         music: str = None,
         music_sheet_path: str = None
     ):
@@ -39,9 +39,9 @@ class RhythmGameLogic:
         # 游戏区域设置
         self.screen_width = screen_width
         self.screen_height = screen_height
-        self.note_radius = 40  # 内圈半径
-        self.max_radius = 120  # 初始判定圈半径
-        self.acceptance_radius = 70  # 手部距离音符中心多近算命中
+        self.note_radius = 30  # 内圈半径 (减小为30，原值为40)
+        self.max_radius = 100  # 初始判定圈半径 (减小为100，原值为120)
+        self.acceptance_radius = 60  # 手部距离音符中心多近算命中 (调整为60，原值为70)
         self.padding = 100  # 边缘填充，防止音符生成在屏幕边缘
         
         # 计算音符持续时间（圈的收缩速度）
@@ -202,10 +202,19 @@ class RhythmGameLogic:
                 x = min(max(x, self.padding), self.screen_width - self.padding)
                 y = min(max(y, self.padding), self.screen_height - self.padding)
                 
-                # 获取该关键点对应的身体部位名称
+                # 获取该关键点对应的身体部位名称和索引
                 keypoint_name = None
+                keypoint_index = None
+                
                 if idx < len(self.music_sheet_loader.keypoint_names):
                     keypoint_name = self.music_sheet_loader.keypoint_names[idx]
+                
+                if idx < len(self.music_sheet_loader.keypoint_indices):
+                    keypoint_index = self.music_sheet_loader.keypoint_indices[idx]
+                else:
+                    # 如果没有明确的索引映射，使用与名称对应的索引
+                    # 这里假设索引与JSON中的顺序对应
+                    keypoint_index = idx
                 
                 # 创建新音符
                 note = Note(
@@ -214,7 +223,8 @@ class RhythmGameLogic:
                     radius=self.note_radius,
                     max_radius=self.max_radius,
                     duration=self.note_duration,
-                    keypoint_name=keypoint_name
+                    keypoint_name=keypoint_name,
+                    keypoint_index=keypoint_index
                 )
                 self.notes.append(note)
             
@@ -236,33 +246,36 @@ class RhythmGameLogic:
         keypoints = person['keypoints_xy']
         keypoints_conf = person['keypoints_conf']
         
-        # 只考虑手腕关键点（9: 左手腕, 10: 右手腕）
-        wrist_indices = [9, 10]
-        palm_positions = {}
+        # 定义所有可用于交互的关键点索引
+        # 包括但不限于手腕，也包括其他可能被用作触发点的关键点
+        # 0: nose, 5: left shoulder, 6: right shoulder, 7: left elbow, 8: right elbow, 
+        # 9: left wrist, 10: right wrist, 11: left hip, 12: right hip,
+        # 13: left knee, 14: right knee, 15: left ankle, 16: right ankle
+        active_keypoints = [0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
         
-        # 获取手掌位置，考虑置信度阈值
-        for idx in wrist_indices:
+        # 收集所有有效的关键点位置
+        keypoint_positions = {}
+        for idx in active_keypoints:
             if idx < len(keypoints) and keypoints_conf[idx] >= self.confidence_threshold:
-                palm_positions[idx] = (int(keypoints[idx][0]), int(keypoints[idx][1]))
+                keypoint_positions[idx] = (int(keypoints[idx][0]), int(keypoints[idx][1]))
         
         # 检查每个音符
         for note in self.notes:
             if note.judged:
                 continue
             
-            # 检查音符与手掌的碰撞
-            for idx in wrist_indices:
-                if idx not in palm_positions:
-                    continue
-                
-                # 获取手掌位置
-                px, py = palm_positions[idx]
-                
-                # 计算手掌到音符中心的距离
+            # 检查音符是否与任何关键点发生碰撞
+            for kp_idx, (px, py) in keypoint_positions.items():
+                # 计算关键点到音符中心的距离
                 distance = ((note.x - px) ** 2 + (note.y - py) ** 2) ** 0.5
                 
-                # 检查手掌是否在音符接受半径内
+                # 检查关键点是否在音符接受半径内
                 if distance <= self.acceptance_radius:
+                    # 检查关键点是否与音符要求的关键点匹配
+                    if note.keypoint_index is not None and kp_idx != note.keypoint_index:
+                        # 关键点不匹配，继续检查下一个关键点
+                        continue
+                    
                     # 命中！
                     self.hits += 1
                     
@@ -283,8 +296,10 @@ class RhythmGameLogic:
                     # 添加视觉命中反馈
                     note.hit_feedback_time = time.time()
                     self.hit_feedback.append((note.x, note.y, note.hit_feedback_time, "hit"))
+                    
+                    # 成功命中后，跳出当前音符的检测循环
                     break
-                
+            
             # 检查音符是否被错过（判定时机到达但未被命中）
             if not note.hit and note.update():
                 # 音符被错过

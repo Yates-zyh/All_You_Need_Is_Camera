@@ -1,5 +1,5 @@
 """
-Core pose detection and tracking framework using YOLOv8-Pose.
+Core pose detection and tracking framework using YOLO11X-Pose.
 """
 import time
 from collections import deque
@@ -22,10 +22,10 @@ class PoseFramework:
         track_buffer_size: int = 10,
     ):
         """
-        Initialize the YOLOv8-Pose framework.
+        Initialize the YOLOv11-Pose framework.
 
         Args:
-            model_path: Path to the YOLOv8 pose model weights.
+            model_path: Path to the YOLOv11 pose model weights.
             device: Device to run the model on ('cuda' or 'cpu'). If None, will use cuda if available.
             confidence_threshold: Minimum detection confidence to consider.
             track_buffer_size: Number of past frames to track for trajectory analysis.
@@ -258,7 +258,7 @@ class PoseFramework:
         
         return vis_frame
     
-    def setup_camera(self, camera_id: int = 0, width: int = 1280, height: int = 720) -> None:
+    def setup_camera(self, camera_id: int = 0, width: int = 1920, height: int = 1080) -> None:
         """
         Set up and configure a camera for capturing.
         
