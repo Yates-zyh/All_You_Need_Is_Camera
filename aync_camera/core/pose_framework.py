@@ -258,7 +258,7 @@ class PoseFramework:
         
         return vis_frame
     
-    def setup_camera(self, camera_id: int = 0, width: int = 1920, height: int = 1080) -> None:
+    def setup_camera(self, camera_id: int = 0, width: int = 1280, height: int = 720) -> None:
         """
         Set up and configure a camera for capturing.
         

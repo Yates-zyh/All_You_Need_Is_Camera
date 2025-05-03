@@ -26,8 +26,8 @@ class RhythmGame(GameBase):
         model_path: str = "yolo11x-pose.pt",
         difficulty: str = "normal",
         music: str = None,
-        screen_width: int = 1920,
-        screen_height: int = 1080,
+        screen_width: int = 1280,
+        screen_height: int = 720,
         music_sheet_path: str = None
     ):
         """

@@ -16,8 +16,8 @@ class RhythmGameLogic:
     def __init__(
         self, 
         difficulty: str = "normal",
-        screen_width: int = 1920,
-        screen_height: int = 1080,
+        screen_width: int = 1280,
+        screen_height: int = 720,
         music: str = None,
         music_sheet_path: str = None
     ):

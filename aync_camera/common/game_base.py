@@ -17,8 +17,8 @@ class GameBase:
         self, 
         camera_id: int = 0, 
         model_path: str = "yolo11x-pose.pt",
-        screen_width: int = 1920,
-        screen_height: int = 1080
+        screen_width: int = 1280,
+        screen_height: int = 720
     ):
         """
         初始化游戏基类。

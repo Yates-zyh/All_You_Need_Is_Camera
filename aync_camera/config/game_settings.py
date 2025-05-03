@@ -4,8 +4,8 @@
 
 # 屏幕设置
 SCREEN_SETTINGS = {
-    "default_width": 1920,
-    "default_height": 1080
+    "default_width": 1280,
+    "default_height": 720
 }
 
 # 游戏颜色
