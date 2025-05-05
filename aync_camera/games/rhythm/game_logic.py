@@ -180,11 +180,17 @@ class RhythmGameLogic:
             current_beat = self.music_sheet_loader.beat_data[self.current_beat_index]
             beat_time = current_beat.get('time', 0)
             
-            # 如果当前时间还没到达这个节拍时间，跳出循环
-            if elapsed_time < beat_time:
+            # 计算音符的目标时间（绝对时间）
+            target_time_abs = self.game_start_time + beat_time
+            
+            # 计算音符的出现时间（绝对时间）
+            appear_time_abs = target_time_abs - self.note_duration
+            
+            # 如果当前时间还没到达这个音符的出现时间，跳出循环
+            if elapsed_time < (appear_time_abs - self.game_start_time):
                 break
                 
-            # 如果当前时间已经超过了这个节拍时间，生成音符
+            # 如果当前时间已经超过了这个音符的出现时间，生成音符
             keypoints_data = current_beat.get('keypoints', [])
             
             # 遍历每个关键点坐标，如果有有效坐标则生成音符
@@ -226,15 +232,18 @@ class RhythmGameLogic:
                     # 这里假设索引与JSON中的顺序对应
                     keypoint_index = idx
                 
-                # 创建新音符
+                # 创建新音符，使用目标时间而不是开始时间
                 note = Note(
                     x=int(x),
                     y=int(y),
                     radius=self.note_radius,
                     max_radius=self.max_radius,
+                    target_time=target_time_abs,
                     duration=self.note_duration,
                     keypoint_name=keypoint_name,
-                    keypoint_index=keypoint_index
+                    keypoint_index=keypoint_index,
+                    hit_window_width=self.difficulty_settings.get("hit_window_width", 0.4),
+                    perfect_threshold=self.difficulty_settings.get("perfect_threshold", 0.08)
                 )
                 self.notes.append(note)
             
@@ -354,7 +363,7 @@ class RhythmGameLogic:
 
     def check_hits(self, pose_data):
         """
-        检查玩家姿态与音符之间的碰撞。
+        检查玩家姿态与音符之间的碰撞，并使用时间窗口进行分级判定。
         
         Args:
             pose_data: 来自PoseFramework的姿态数据
@@ -387,6 +396,9 @@ class RhythmGameLogic:
         for idx in active_keypoints:
             if idx < len(keypoints) and keypoints_conf[idx] >= self.confidence_threshold:
                 keypoint_positions[idx] = (int(keypoints[idx][0]), int(keypoints[idx][1]))
+        
+        # 获取当前时间，用于判定窗口检查
+        current_time = time.time()
         
         # 检查每个音符
         for note in self.notes:
@@ -449,34 +461,45 @@ class RhythmGameLogic:
             
             # 处理命中结果
             if hit and hit_kp_idx is not None:
-                # 命中！
-                self.hits += 1
-                
-                # 计算得分（如果启用连击倍率）
-                hit_score = SCORE_PER_HIT
-                if COMBO_MULTIPLIER:
-                    hit_score *= max(1, self.combo)
-                self.score += hit_score
-                
-                # 更新连击
-                self.combo += 1
-                self.max_combo = max(self.max_combo, self.combo)
-                
-                # 标记音符为命中
-                note.hit = True
-                note.judged = True  # 标记这个音符已被判定
-                
-                # 添加视觉命中反馈
-                note.hit_feedback_time = time.time()
-                self.hit_feedback.append((note.x, note.y, note.hit_feedback_time, "hit"))
-            
-            # 检查音符是否被错过（判定时机到达但未被命中）
-            elif note.update():
-                # 音符被错过
-                self.misses += 1
-                self.combo = 0
-                note.missed = True
-                note.judged = True  # 标记这个音符已被判定
+                # 检查是否在判定窗口内
+                if note.hit_window_start <= current_time <= note.hit_window_end:
+                    # 计算时间偏差
+                    time_diff = abs(current_time - note.target_time)
+                    
+                    # 分级判定
+                    if time_diff <= note.perfect_threshold:
+                        judgment_result = "Perfect"
+                        # Perfect得到额外奖励分数
+                        hit_score = SCORE_PER_HIT * 1.5
+                    else:
+                        judgment_result = "Good"
+                        hit_score = SCORE_PER_HIT
+                    
+                    # 如果启用连击倍率
+                    if COMBO_MULTIPLIER:
+                        hit_score *= max(1, self.combo)
+                    
+                    # 更新游戏状态
+                    self.hits += 1
+                    self.score += int(hit_score)
+                    self.combo += 1
+                    self.max_combo = max(self.max_combo, self.combo)
+                    
+                    # 标记音符状态
+                    note.hit = True
+                    note.judged = True
+                    note.judgment = judgment_result
+                    note.hit_time = current_time
+                    
+                    # 添加视觉命中反馈
+                    note.hit_feedback_time = current_time
+                    self.hit_feedback.append((note.x, note.y, note.hit_feedback_time, judgment_result))
+                    
+                    # 既然已判定此音符，跳出关键点循环
+                    break
+                else:
+                    # 在窗口外的命中被忽略
+                    continue
 
     def update_notes(self):
         """更新所有音符状态，移除需要移除的音符。"""
