@@ -4,6 +4,8 @@ Core pose detection and tracking framework using YOLO11X-Pose.
 import time
 from collections import deque
 from typing import Dict, Optional
+import math
+from math import radians, cos, sin
 
 import cv2
 import numpy as np
@@ -20,6 +22,7 @@ class PoseFramework:
         device: Optional[str] = None,
         confidence_threshold: float = 0.5,
         track_buffer_size: int = 10,
+        user_height: float = 1.70,
     ):
         """
         Initialize the YOLOv11-Pose framework.
@@ -46,7 +49,137 @@ class PoseFramework:
         
         # Camera attribute (will be set when setup_camera is called)
         self.camera = None
+
+        # User height (in meters)
+        self.user_height = user_height  # Default height in meters
+    
+    def get_user_height(self):
+        '''Prompt the user to enter their height.'''
+        print("Please enter your height in cm:")
+        while True:
+            try:
+                height = float(input())
+                if height > 0:
+                    return height
+                else:
+                    print("Height must be a positive number. Please try again.")
+            except ValueError:
+                print("Invalid input. Please enter a valid number.")
+    
+    def calculate_distance(self, pixel_height, focal_length):
+        '''use user height to calculate distance'''
+        return (self.user_height * focal_length) / pixel_height
+    
+    def calculate_3d_angles(self, keypoints_np, focal_length):
+        '''
+        Calculate the 3D angles based on the pose landmarks.
+
+        0: "nose", 5: "left_shoulder", 6: "right_shoulder", 
+        7: "left_elbow", 8: "right_elbow", 9: "left_wrist", 
+        10: "right_wrist", 11: "left_hip", 12: "right_hip",
+        13: "left_knee", 14: "right_knee", 15: "left_ankle", 
+        16: "right_ankle"
+
+        '''    
+        angles = {'X': 0, 'Y': 0, 'Z': 0}
+
+        # Extract keypoints
+        nose = keypoints_np[0][0]
+        left_shoulder = keypoints_np[0][5]
+        right_shoulder = keypoints_np[0][6]
+        left_hip = keypoints_np[0][11]
+        right_hip = keypoints_np[0][12]
+        left_ankle = keypoints_np[0][15]
+        right_ankle = keypoints_np[0][16]
+
+        # X-axis tilt (left/right)
+        shoulder_center = (left_shoulder + right_shoulder) / 2
+        hip_center = (left_hip + right_hip) / 2
+        vertical_diff = shoulder_center - hip_center
+        angles['X'] = math.degrees(math.atan(vertical_diff[0]/(vertical_diff[1]+0.00001)))
+
+        # Y-axis tilt (forward/backward)
+        shoulder_length = np.linalg.norm(right_shoulder - left_shoulder)
+        shoulder_distance = (0.40 * focal_length) / shoulder_length#tune this value 0.4
+        hip_length = np.linalg.norm(right_hip - left_hip)
+        hip_distance = (0.30 * focal_length) / hip_length#tune this value 0.3
+        height = nose[1]-left_ankle[1]  # Y-axis height difference
+        angles['Y'] = math.degrees(math.cos((shoulder_distance**2 + hip_distance**2 - (self.user_height/2)**2)/(2*shoulder_distance*hip_distance)))  # Positive for forward lean
+
+        # Z-axis rotation (shoulder vs. hip line)
+        shoulder_vector = np.array([right_shoulder[0] - left_shoulder[0], 
+                                    right_shoulder[1] - left_shoulder[1]])
+        hip_vector = np.array([right_hip[0] - left_hip[0], 
+                                right_hip[1] - left_hip[1]])
+        cos_theta = np.dot(shoulder_vector, hip_vector) / (
+            np.linalg.norm(shoulder_vector) * np.linalg.norm(hip_vector) + 1e-7)
+        angles['Z'] = np.degrees(np.arccos(np.clip(cos_theta, -1, 1)))
         
+        return angles
+
+    def get_rotation_matrix(pitch, yaw, roll):
+        """Generate a 3D rotation matrix for pitch, yaw, and roll."""
+        pitch = radians(pitch)
+        yaw = radians(yaw)
+        roll = radians(roll)
+
+        # Rotation matrix for pitch (X-axis)
+        Rx = np.array([[1, 0, 0],
+                    [0, cos(pitch), -sin(pitch)],
+                    [0, sin(pitch), cos(pitch)]])
+        
+        # Rotation matrix for yaw (Y-axis)
+        Ry = np.array([[cos(yaw), 0, sin(yaw)],
+                    [0, 1, 0],
+                    [-sin(yaw), 0, cos(yaw)]])
+        
+        # Rotation matrix for roll (Z-axis)
+        Rz = np.array([[cos(roll), -sin(roll), 0],
+                    [sin(roll), cos(roll), 0],
+                    [0, 0, 1]])
+
+        # Combined rotation matrix
+        rotation_matrix = np.dot(Rz, np.dot(Ry, Rx))
+        
+        return rotation_matrix
+
+    def draw_instructions(self, frame: np.ndarray, pose_data: Dict) -> np.ndarray:
+        """
+        Draw instructions on the frame.
+        
+        Args:
+            frame: Input image frame.
+            instructions: Instructions to display.
+            
+        Returns:
+            Frame with instructions drawn.
+        """
+        #print("Drawing instructions...")
+        instruction_frame = frame.copy()
+        # Draw instructions on the frame
+        for person in pose_data['persons']:
+            distance = person['distance']
+            angles = person['angles']
+            cv2.putText(instruction_frame, f"Distance: {distance:.2f} m", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.putText(instruction_frame, f"X: {angles['X']:.2f} Y: {angles['Y']:.2f} Z: {angles['Z']:.2f}", (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            if distance < 1.5:
+                cv2.putText(instruction_frame, "Too Close! Move Back", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            if distance > 3.0:
+                cv2.putText(instruction_frame, "Too Far! Move Closer", (10, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            if angles['X'] > 10:
+                cv2.putText(instruction_frame, "Tilt Left", (10, 250), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            if angles['X'] < -10:
+                cv2.putText(instruction_frame, "Tilt Right", (10, 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            if angles['Y'] > 10:
+                cv2.putText(instruction_frame, "Lean Forward", (10, 350), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            if angles['Y'] < -10:
+                cv2.putText(instruction_frame, "Lean Backward", (10, 400), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            if angles['Z'] > 10:
+                cv2.putText(instruction_frame, "Rotate Left", (10, 450), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            if angles['Z'] < -10:
+                cv2.putText(instruction_frame, "Rotate Right", (10, 500), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        return instruction_frame
+    
     def process_frame(self, frame: np.ndarray) -> Dict:
         """
         Process a single frame to detect and track poses.
@@ -65,6 +198,8 @@ class PoseFramework:
         
         # Mirror the frame horizontally (flip left-right) for processing
         frame = cv2.flip(frame, 1)
+
+        focal_length = 1200  # Example focal length, adjust based on your camera setup
         
         # Run YOLO11x-Pose inference
         with torch.no_grad():
@@ -95,9 +230,23 @@ class PoseFramework:
                         'confidence': float(boxes_np[i][4]),
                         'keypoints_xy': keypoints_np[i, :, :2].tolist(),  # [N, 2] array of [x,y]
                         'keypoints_conf': keypoints_np[i, :, 2].tolist() if keypoints_np.shape[2] > 2 else [1.0] * keypoints_np.shape[1],
-                        'trajectory': None  # Will be filled by tracking
+                        'trajectory': None,  # Will be filled by tracking
+                        'distance': None,  # Will be filled by calculation_distance
+                        'angles': [0,0,0]  # Placeholder for angles
                     }
+                    # Calculate pixel height of the bounding box
+                    y_min, x_min, y_max, x_max = boxes_np[i][:4]  # Extract the coordinates
+                    pixel_height = y_max - y_min  # Calculate the pixel height
                     
+                    # Calculate the distance to the person using the pixel height
+                    distance = self.calculate_distance(pixel_height, focal_length)
+                    person_data['distance'] = distance
+
+                    # Calculate 3D angles based on the pose landmarks
+                    person_data['angles'] = self.calculate_3d_angles(keypoints_np, focal_length)
+                    
+                    #print(f"Distance: {distance:.2f} m, Angles: {person_data['angles']}")
+
                     # Swap left and right keypoints due to mirroring
                     # COCO keypoint format pairs to swap: (5,6), (7,8), (9,10), (11,12), (13,14), (15,16)
                     pairs_to_swap = [(5,6), (7,8), (9,10), (11,12), (13,14), (15,16)]

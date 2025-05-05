@@ -14,6 +14,8 @@ COUNTDOWN = "countdown"
 PLAYING = "playing"
 PAUSED = "paused"
 GAME_OVER = "game_over"
+INSTRUCTION_INIT = "instruction_init"  # Game state when showing instructions of initialization
+INITIALIZATION = "initialization"   # Game state when initializing the game after difficulty selection
 
 class RhythmGameRenderer:
     """Rhythm game UI renderer, handles drawing of all UI elements."""
@@ -66,7 +68,124 @@ class RhythmGameRenderer:
                               self.screen_height // 2, 
                               button_width, button_height)
         }
+        # tap the screen
+        self.tap_text = self.font_large.render("Tap the screen to continue", True, COLORS["white"])
+
+        # ready button for initialization stage
+        # Define the button position and size on the screen (example)
+        self.ready_button = pygame.Rect(self.screen_width // 2, 
+                                        self.screen_height // 2, 
+                                        button_width, button_height)
+        '''
+        didn't use this
+        # "Next" button for moving to the next stage
+        self.next_button = pygame.Rect(self.screen_width // 2 - button_width // 2, 
+                                       self.screen_height // 2 + 100, 
+                                       button_width, button_height)
+        '''
     
+
+
+    def render_instruction_init(self, screen):
+        """
+        Render the initialization UI when the user is preparing.
+        
+        Args:
+            screen: Pygame screen object
+            user_position_feedback: Feedback text based on user positioning
+        """
+        user_position_feedback = "Move closer to the camera"  # Example feedback, can be dynamic based on user position
+        # Clear the screen
+        screen.fill(COLORS["black"])
+        
+        # Draw game title
+        title = self.font_large.render("Initializing", True, COLORS["cyan"])
+        title_rect = title.get_rect(center=(self.screen_width // 2, 100))
+        screen.blit(title, title_rect)
+        
+        # Display position feedback (e.g., Move closer, Move further, Good position)
+        feedback_text = self.font_medium.render(user_position_feedback, True, COLORS["white"])
+        feedback_rect = feedback_text.get_rect(center=(self.screen_width // 2, self.screen_height // 2))
+        screen.blit(feedback_text, feedback_rect)
+        
+        # Instructions
+        instructions = [
+            "Please position yourself in front of the camera.",
+            "Adjust distance and alignment as needed.",
+            "The system will guide you to the optimal position by giving feedbacks like:",
+        ]
+        
+        for i, line in enumerate(instructions):
+            text = self.font_small.render(line, True, COLORS["white"])
+            rect = text.get_rect(center=(self.screen_width // 2, 180 + i * 40))
+            screen.blit(text, rect)
+        # Draw tap text
+        tap_rect = self.tap_text.get_rect(center=(self.screen_width // 2, self.screen_height - 50))
+        screen.blit(self.tap_text, tap_rect)
+        
+        '''
+        didn't use this
+        # Draw "Next" button
+        pygame.draw.rect(screen, COLORS["green"], self.next_button, border_radius=10)
+        pygame.draw.rect(screen, COLORS["white"], self.next_button, 2, border_radius=10)  # Border
+        next_text = self.font_medium.render("Confirm", True, COLORS["black"])
+        next_rect = next_text.get_rect(center=self.next_button.center)
+        screen.blit(next_text, next_rect)
+        '''
+    
+    def render_initialization(self, screen, camera_frame):
+        """
+        Render the initialization UI when the user is preparing.
+        
+        Args:
+            screen: Pygame screen object
+        """
+        # Clear the screen
+        screen.fill(COLORS["black"])
+        # Draw game title
+        title = self.font_large.render("Initializing", True, COLORS["cyan"])
+        title_rect = title.get_rect(center=(self.screen_width // 2, 100))
+        screen.blit(title, title_rect)
+        # If a camera frame is provided, use it as the background
+        if camera_frame is not None:
+            # Get the appropriate frame based on mirror mode
+            if 'original_frame' in camera_frame and not self.mirror_mode:
+                # Use original frame when mirror mode is off
+                display_frame = camera_frame['original_frame']
+            elif 'mirrored_frame' in camera_frame and self.mirror_mode:
+                # Use mirrored frame when mirror mode is on
+                display_frame = camera_frame['mirrored_frame']
+            else:
+                # Fallback to direct frame if neither is available
+                display_frame = camera_frame
+                
+            # Resize to fit the screen
+            display_frame = cv2.resize(display_frame, (self.screen_width, self.screen_height))
+            # Convert to RGB for pygame
+            display_frame = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
+            # Convert to pygame surface
+            surface = pygame.surfarray.make_surface(display_frame.swapaxes(0, 1))
+            # Add transparency
+            surface.set_alpha(160)  # Slightly less opaque for better visibility of poses
+            # Draw
+            screen.blit(surface, (0, 0))
+        #Draw ready button
+        self.render_ready_button(screen)
+    
+    def render_ready_button(self, screen):
+        """
+        Render the ready button for initialization stage.
+        
+        Args:
+            screen: Pygame screen object
+        """
+        # Draw "Ready" button
+        pygame.draw.rect(screen, COLORS["green"], self.ready_button, border_radius=10)
+        pygame.draw.rect(screen, COLORS["white"], self.ready_button, 2, border_radius=10)
+        ready_text = self.font_medium.render("Ready", True, COLORS["black"])
+        text_rect = ready_text.get_rect(center=self.ready_button.center)
+        screen.blit(ready_text, text_rect)
+
     def render_game(self, screen, game_state, camera_frame=None):
         """
         Render the complete game screen.
