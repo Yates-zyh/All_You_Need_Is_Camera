@@ -97,43 +97,56 @@ class RhythmGameLogic:
         self.game_start_time = time.time()
         
     def _calculate_mapping_params(self):
-        """计算JSON坐标到屏幕坐标的映射参数"""
-        # 获取原始视频尺寸
+        """
+        Calculate mapping parameters from JSON coordinates to screen coordinates.
+        Optimizes the playable area by fitting the video dimensions to screen dimensions
+        while maintaining aspect ratio (proportional scaling).
+        """
+        # Get original video dimensions
         video_info = self.music_sheet_loader.json_data.get('video_info', {})
         json_video_width = video_info.get('width', self.screen_width)
         json_video_height = video_info.get('height', self.screen_height)
         
-        # 计算缩放因子
+        # Calculate scaling factors
         scale_x = self.screen_width / json_video_width
         scale_y = self.screen_height / json_video_height
+        
+        # Use the smaller scale factor to maintain aspect ratio (proportional scaling)
         self.scale_factor = min(scale_x, scale_y)
         
-        # 计算缩放后的尺寸
+        # Calculate dimensions after scaling
         scaled_width = json_video_width * self.scale_factor
         scaled_height = json_video_height * self.scale_factor
         
-        # 计算居中偏移量
+        # Calculate centering offsets to position the playable area in the center of the screen
         self.offset_x = (self.screen_width - scaled_width) / 2
         self.offset_y = (self.screen_height - scaled_height) / 2
         
+        # Store the playable area boundaries for reference
+        self.playable_area = {
+            'x_min': self.offset_x,
+            'y_min': self.offset_y,
+            'x_max': self.offset_x + scaled_width,
+            'y_max': self.offset_y + scaled_height,
+            'width': scaled_width,
+            'height': scaled_height
+        }
+        
     def _map_coordinates(self, x, y):
         """
-        将JSON坐标映射到屏幕坐标
+        Map JSON coordinates to screen coordinates with proportional scaling.
         
         Args:
-            x: JSON中的X坐标
-            y: JSON中的Y坐标
+            x: X coordinate in JSON
+            y: Y coordinate in JSON
             
         Returns:
             tuple: (screen_x, screen_y)
         """
-        # 先应用缩放
-        screen_x = x * self.scale_factor
-        screen_y = y * self.scale_factor
-        
-        # 再应用偏移
-        screen_x += self.offset_x
-        screen_y += self.offset_y
+        # Apply proportional scaling and centering to maintain aspect ratio
+        # This ensures human body proportions remain consistent
+        screen_x = x * self.scale_factor + self.offset_x
+        screen_y = y * self.scale_factor + self.offset_y
         
         return int(screen_x), int(screen_y)
     
