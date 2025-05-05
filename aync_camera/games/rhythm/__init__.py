@@ -96,6 +96,7 @@ class RhythmGame(GameBase):
         logger.info(f"Game initialized with music: {self.music}, difficulty: {self.difficulty}")
         logger.info(f"Music sheet path: {self.music_sheet_path}")
     
+    '''
     def initialize(self):
         self.initialization = Initialization(
             camera_id=self.camera_id,
@@ -126,8 +127,11 @@ class RhythmGame(GameBase):
             # Press 'q' to quit
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-
+        
         self.camera.release()
+        
+        '''
+    
     def create_game_logic(self):
         """创建游戏逻辑实例，在选择难度后调用"""
         self.game_logic = RhythmGameLogic(
@@ -427,9 +431,19 @@ class RhythmGame(GameBase):
         if self.game_state == INITIALIZATION:
             self.game_logic.check_ready(pose_data)
             if self.game_logic.is_ready:
-                logger.info("State transition: INITIALIZATION -> COUNTDOWN")
-                self.game_state = COUNTDOWN
-                self.countdown_start_time = time.time()
+                #remove ready button
+                self.ui_renderer.ready_button.x = -1000
+                self.ui_renderer.ready_button.y = -1000
+                self.game_logic.check_still(pose_data)
+                #print("ready")
+                if self.game_logic.is_moving:
+                    self.ui_renderer.show_moving_text(self.screen)
+
+                if self.game_logic.is_still:
+                    #print("still")
+                    logger.info("State transition: INITIALIZATION -> COUNTDOWN")
+                    self.game_state = COUNTDOWN
+                    self.countdown_start_time = time.time()
 
         elif self.game_state == PLAYING and pose_data is not None:
             # 游戏进行中的逻辑

@@ -71,6 +71,9 @@ class RhythmGameRenderer:
         # tap the screen
         self.tap_text = self.font_large.render("Tap the screen to continue", True, COLORS["white"])
 
+        # instruction
+        self.instructions = None
+
         # ready button for initialization stage
         # Define the button position and size on the screen (example)
         self.ready_button = pygame.Rect(self.screen_width // 2, 
@@ -84,7 +87,17 @@ class RhythmGameRenderer:
                                        button_width, button_height)
         '''
     
-
+    def show_moving_text(self, screen):
+        """
+        Show moving text on the screen.
+        
+        Args:
+            screen: Pygame screen object
+        """
+        # Example of moving text
+        text = self.font_large.render("User is moving, please stay still.", True, COLORS["white"])
+        screen.blit(text, (self.screen_width // 2 - text.get_width() // 2, self.screen_height // 2 - text.get_height() // 2))
+        
 
     def render_instruction_init(self, screen):
         """
@@ -185,6 +198,15 @@ class RhythmGameRenderer:
         ready_text = self.font_medium.render("Ready", True, COLORS["black"])
         text_rect = ready_text.get_rect(center=self.ready_button.center)
         screen.blit(ready_text, text_rect)
+
+    def remove_ready_button(self):
+        """Remove the ready button by setting its position to an off-screen location."""
+        self.ready_button.x = -1000
+        self.ready_button.y = -1000
+        # Optionally, you can also set its size to zero
+        self.ready_button.width = 0
+        self.ready_button.height = 0
+        # This effectively makes it invisible and unclickable.
 
     def render_game(self, screen, game_state, camera_frame=None):
         """

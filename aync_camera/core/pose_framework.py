@@ -143,6 +143,12 @@ class PoseFramework:
         
         return rotation_matrix
 
+    def is_user_still(self, prev_positions, current_position, threshold=10):
+        distance_moved = np.linalg.norm(np.array(prev_positions) - np.array(current_position))
+        if distance_moved < threshold:
+            return True
+        return False
+
     def draw_instructions(self, frame: np.ndarray, pose_data: Dict) -> np.ndarray:
         """
         Draw instructions on the frame.
