@@ -76,6 +76,9 @@ class RhythmGameLogic:
         self.offset_x = 0
         self.offset_y = 0
         
+        # Initialize the music sheet loader
+        self.is_ready = False
+        
         # 如果提供了谱面路径，尝试加载
         if self.music_sheet_path:
             self.using_music_sheet = self.music_sheet_loader.load_music_sheet(self.music_sheet_path)
@@ -231,6 +234,68 @@ class RhythmGameLogic:
             # 处理完这个节拍后，移动到下一个
             self.current_beat_index += 1
     
+    def check_ready(self, pose_data):
+        """
+        Check if the player's hand is over the 'Ready' button.
+
+        Args:
+            pose_data (dict): The pose data containing keypoints for the user.
+            
+        Returns:
+            bool: True if the hand is over the button, otherwise False.
+        """
+        #print("Checking if hand is over the button...")
+        # Define the button position and size on the screen (example)
+        button_x, button_y = self.screen_width // 2, self.screen_height // 2  # Center of the screen
+        button_width, button_height = 300, 60  # Size of the button (width, height)
+        
+        # Define the button's area (top-left and bottom-right corners)
+        button_left = button_x - button_width // 2
+        button_top = button_y - button_height // 2
+        button_right = button_x + button_width // 2
+        button_bottom = button_y + button_height // 2
+
+        # Check if any hand (left or right wrist) is within the button area
+        if pose_data['persons']:
+            person = pose_data['persons'][0]
+            keypoints = person['keypoints_xy']
+            keypoints_conf = person['keypoints_conf']
+
+            # Get the left and right wrist positions (index 9 and 10 in COCO keypoints)
+            if len(keypoints) > 10:
+                left_wrist = keypoints[9]
+                right_wrist = keypoints[10]
+
+                # Check if left wrist is over the button
+                if self.is_within_button_area(left_wrist[0], left_wrist[1], button_left, button_top, button_right, button_bottom):
+                    #print("Left wrist is over the button")
+                    self.is_ready = True
+                    return True
+                # Check if right wrist is over the button
+                if self.is_within_button_area(right_wrist[0], right_wrist[1], button_left, button_top, button_right, button_bottom):
+                    #print("right wrist is over the button")
+                    self.is_ready = True
+                    return True
+        return False
+
+    def is_within_button_area(self, x, y, button_left, button_top, button_right, button_bottom):
+        """
+        Check if a point (x, y) is inside the button area.
+        
+        Args:
+            x (float): x-coordinate of the point.
+            y (float): y-coordinate of the point.
+            button_left (int): Left side of the button.
+            button_top (int): Top side of the button.
+            button_right (int): Right side of the button.
+            button_bottom (int): Bottom side of the button.
+            
+        Returns:
+            bool: True if the point is within the button area, otherwise False.
+        """
+        return button_left <= x <= button_right and button_top <= y <= button_bottom
+
+
     def check_hits(self, pose_data):
         """
         检查玩家姿态与音符之间的碰撞。

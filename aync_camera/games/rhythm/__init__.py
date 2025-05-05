@@ -4,13 +4,15 @@ import logging
 import os
 import subprocess
 import tempfile
+import cv2
 
 from aync_camera.common.game_base import GameBase
 from aync_camera.games.rhythm.game_logic import RhythmGameLogic
 from aync_camera.ui.rhythm.renderer import (RhythmGameRenderer, START_SCREEN, 
                                            SONG_SELECTION, COUNTDOWN, PLAYING, 
-                                           PAUSED, GAME_OVER)
+                                           PAUSED, GAME_OVER, INSTRUCTION_INIT, INITIALIZATION)
 from aync_camera.config.rhythm_config import MUSIC_SHEETS, DEFAULT_MUSIC
+#from aync_camera.initialization.initialize import Initialization
 
 # 初始化pygame音频
 pygame.mixer.init()
@@ -94,6 +96,38 @@ class RhythmGame(GameBase):
         logger.info(f"Game initialized with music: {self.music}, difficulty: {self.difficulty}")
         logger.info(f"Music sheet path: {self.music_sheet_path}")
     
+    def initialize(self):
+        self.initialization = Initialization(
+            camera_id=self.camera_id,
+            width=self.screen_width,
+            height=self.screen_height
+        )
+        self.initialization.open_camera()
+        user_height = self.initialization.get_user_height()
+
+        while True:
+            ret, frame = self.camera.read()
+            if not ret:
+                break
+            
+            # Get distance and angles
+            
+            frame, distance, distance_text = self.distance_detection(frame, user_height)
+            angles = self.calculate_3d_angles(frame)
+            
+            # Show the distance and angles on the screen
+            cv2.putText(frame, f"Distance: {distance_text}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+            cv2.putText(frame, f"Angles: X={angles['X']:.2f} Y={angles['Y']:.2f} Z={angles['Z']:.2f}", 
+                        (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+            
+            # Display the result
+            cv2.imshow("Initialization - Adjust Position", frame)
+
+            # Press 'q' to quit
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        self.camera.release()
     def create_game_logic(self):
         """创建游戏逻辑实例，在选择难度后调用"""
         self.game_logic = RhythmGameLogic(
@@ -285,6 +319,8 @@ class RhythmGame(GameBase):
                     self._handle_difficulty_selection(event.pos)
                 elif self.game_state == SONG_SELECTION:
                     self._handle_song_selection(event.pos)
+                elif self.game_state == INSTRUCTION_INIT:
+                    self._handle_tap_continue()
                 elif self.game_state == GAME_OVER:
                     if hasattr(self.ui_renderer, 'restart_button') and self.ui_renderer.restart_button.collidepoint(event.pos):
                         # 重新选择歌曲
@@ -319,8 +355,8 @@ class RhythmGame(GameBase):
                 
                 # 开始倒计时
                 self.countdown_start_time = time.time()
-                self.game_state = COUNTDOWN
-                logger.info(f"State transition: START_SCREEN -> COUNTDOWN")
+                self.game_state = INSTRUCTION_INIT
+                logger.info(f"State transition: START_SCREEN -> INSTRUCTION_INIT")
                 break
     
     def _handle_song_selection(self, mouse_pos):
@@ -342,7 +378,16 @@ class RhythmGame(GameBase):
                 self.game_state = START_SCREEN
                 logger.info(f"State transition: SONG_SELECTION -> START_SCREEN")
                 break
-    
+
+    def _handle_tap_continue(self):
+        """
+        Handle tap the screen to continue event.
+        Args:
+            mouse_pos: Current mouse position
+        """
+        logger.info("Tap detected: INSTRUCTION_INIT -> INITIALIZATION")
+        self.game_state = INITIALIZATION
+  
     def update(self, pose_data=None):
         """
         更新游戏状态。
@@ -379,6 +424,13 @@ class RhythmGame(GameBase):
                 if self.audio_extracted and not self.audio_playing:
                     self.play_audio()
         
+        if self.game_state == INITIALIZATION:
+            self.game_logic.check_ready(pose_data)
+            if self.game_logic.is_ready:
+                logger.info("State transition: INITIALIZATION -> COUNTDOWN")
+                self.game_state = COUNTDOWN
+                self.countdown_start_time = time.time()
+
         elif self.game_state == PLAYING and pose_data is not None:
             # 游戏进行中的逻辑
             # 检查命中并更新游戏状态
@@ -420,14 +472,33 @@ class RhythmGame(GameBase):
             camera_frame: 可选的摄像头帧，用于背景显示
         """
         # 处理不同状态的渲染
-        if self.game_state == START_SCREEN:
-            # 渲染开始界面（难度选择）
-            self.ui_renderer.render_start_screen(screen, self.music)
-            
-        elif self.game_state == SONG_SELECTION:
+        if self.game_state == SONG_SELECTION:
             # 渲染歌曲选择界面
             self.ui_renderer.render_song_selection(screen)
+        
+        elif self.game_state == START_SCREEN:
+            # 渲染开始界面（难度选择）
+            self.ui_renderer.render_start_screen(screen, self.music)
+
+        elif self.game_state == INSTRUCTION_INIT:
+            # instruction to initialization of camera and user pose
+            self.ui_renderer.render_instruction_init(screen)
             
+        elif self.game_state == INITIALIZATION:
+            # initialization of camera and user pose
+            if camera_frame is not None:
+                # deal with camera frame
+                pose_data = self.framework.process_frame(camera_frame)
+
+                # visualize pose
+                camera_frame = self.framework.draw_results(camera_frame, pose_data, highlight_palms=True)
+                
+                # draw instruction
+                camera_frame = self.framework.draw_instructions(camera_frame, pose_data)
+                # 更新游戏状态
+                self.update(pose_data)
+            self.ui_renderer.render_initialization(screen, camera_frame)
+
         elif self.game_state == COUNTDOWN:
             # 渲染倒计时
             countdown_time = 3 - (time.time() - self.countdown_start_time)
