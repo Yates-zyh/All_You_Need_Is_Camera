@@ -3,6 +3,7 @@
 """
 import random
 import time
+import numpy as np
 
 from aync_camera.config.rhythm_config import (COMBO_MULTIPLIER, 
                                             DIFFICULTY_PRESETS, SCORE_PER_HIT)
@@ -76,6 +77,12 @@ class RhythmGameLogic:
         self.offset_x = 0
         self.offset_y = 0
         
+        self.prev_position = None  # To store previous position of the user
+        self.is_still = False
+        self.is_moving = True  # To track if the user is moving
+        self.still_start_time = None  # Time when the user started staying still
+        self.still_duration = 3  # Duration to stay still in seconds (3 seconds)
+
         # Initialize the music sheet loader
         self.is_ready = False
         
@@ -295,6 +302,55 @@ class RhythmGameLogic:
         """
         return button_left <= x <= button_right and button_top <= y <= button_bottom
 
+    def is_user_still(self, current_position, threshold=10):
+        if self.prev_position is None:
+            return False  # If there's no previous position, we assume movement
+
+        distance_moved = np.linalg.norm(np.array(self.prev_position) - np.array(current_position))
+        #print("Distance moved:", distance_moved)
+        if distance_moved < threshold:
+            return True
+        return False
+    
+    def check_still(self, pose_data, threshold=10):
+        """
+        Check if the user is still (not moving significantly).
+        
+        Args:
+            pose_data: Data from Pose framework that contains the keypoints.
+            threshold: The threshold to determine if the user is still.
+            
+        Returns:
+            bool: True if the user is still, False otherwise.
+        """
+        if not pose_data['persons']:
+            return False
+        person = pose_data['persons'][0]
+        keypoints = person['keypoints_xy']
+
+        head = keypoints[0]
+
+        # Check if the user is still (not moving significantly)
+        if self.prev_position is not None:
+            #print("Previous position:", self.prev_position)
+            #print("Current head position:", head)
+            still = self.is_user_still(head, threshold)
+            if still:
+                self.is_moving = False
+                if self.still_start_time is None:
+                    # User just became still, start tracking time
+                    self.still_start_time = time.time()
+                else:
+                    elapsed_time = time.time() - self.still_start_time
+                    if elapsed_time >= self.still_duration:
+                        self.is_still = True
+            else:
+                print("User is moving, please stay still.")
+                self.still_start_time = None  # Reset the timer
+                self.is_still = False
+                self.is_moving = True
+        # Update the previous position for the next frame
+        self.prev_position = head
 
     def check_hits(self, pose_data):
         """
