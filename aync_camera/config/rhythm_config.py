@@ -7,17 +7,23 @@ DIFFICULTY_PRESETS = {
     "easy": {
         "spawn_rate": 0.01,
         "note_speed": 3.0,
-        "confidence_threshold": 0.4
+        "confidence_threshold": 0.4,
+        "hit_window_width": 0.6,  # 较宽的判定窗口（秒）
+        "perfect_threshold": 0.15  # 较宽松的Perfect判定（秒）
     },
     "normal": {
         "spawn_rate": 0.02,
         "note_speed": 5.0,
-        "confidence_threshold": 0.5
+        "confidence_threshold": 0.5,
+        "hit_window_width": 0.4,  # 标准判定窗口（秒）
+        "perfect_threshold": 0.08  # 标准Perfect判定（秒）
     },
     "hard": {
         "spawn_rate": 0.04,
         "note_speed": 7.0,
-        "confidence_threshold": 0.6
+        "confidence_threshold": 0.6,
+        "hit_window_width": 0.3,  # 较窄的判定窗口（秒）
+        "perfect_threshold": 0.05  # 严格的Perfect判定（秒）
     }
 }
 

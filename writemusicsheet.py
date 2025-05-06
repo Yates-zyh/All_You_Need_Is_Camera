@@ -21,12 +21,12 @@ Output 输出:
 - Location 位置: ./musicsheet/<video_name>/
 - Format 格式: Three JSON files will be generated for each video:
               每个视频将生成三个JSON文件：
-  * <video_name>_easy.json - 4 keypoints (Left/Right Wrist, Left/Right Ankle)
-                             4个关键点（左/右手腕，左/右脚踝）
-  * <video_name>_normal.json - 8 keypoints (Easy + Left/Right Hip, Left/Right Shoulder)
-                              8个关键点（简单难度的点 + 左/右髋部，左/右肩部）
-  * <video_name>_hard.json - 13 keypoints (All except eyes and ears)
-                            13个关键点（除了眼睛和耳朵外的所有关键点）
+  * <video_name>_easy.json - Same 4 keypoints (Right/Left Wrist, Right/Left Ankle) at 0.25 sampling rate (1 beat every 4 beats)
+                             相同的4个关键点（右/左手腕，右/左脚踝），采样率0.25（每4拍取1拍）
+  * <video_name>_normal.json - Same 4 keypoints at 0.5 sampling rate (1 beat every 2 beats)
+                              相同的4个关键点，采样率0.5（每2拍取1拍）
+  * <video_name>_hard.json - Same 4 keypoints at 1.0 sampling rate (every beat)
+                            相同的4个关键点，采样率1.0（每拍都取）
 
 Requirements 依赖:
 - Python 3.6+
@@ -329,34 +329,41 @@ class MusicSheetGenerator:
         os.makedirs(output_dir, exist_ok=True)
         print(f"Creating output directory: {output_dir}")
         
-        # Define keypoint indices for different difficulty levels
-        easy_keypoints = [9, 10, 15, 16]  # Left/Right Wrist, Left/Right Ankle
-        medium_keypoints = [9, 10, 15, 16, 11, 12, 5, 6]  # Easy + Left/Right Hip, Left/Right Shoulder
-        hard_keypoints = list(range(17))  # All keypoints except [1, 2, 3, 4] (eyes and ears)
-        hard_keypoints = [i for i in hard_keypoints if i not in [1, 2, 3, 4]]
+        # Define keypoints to use for all difficulty levels (same 4 points)
+        selected_keypoints = [9, 10, 15, 16]  # Right Wrist, Left Wrist, Right Ankle, Left Ankle
         
-        # Keypoint names for reference (full set)
+        # Define difficulty levels based on sampling frequency
+        difficulty_levels = {
+            "easy": 0.25,    # Every 4 beats
+            "normal": 0.5,   # Every 2 beats
+            "hard": 1.0      # Every beat
+        }
+        
+        # Keypoint names for reference
         keypoint_names_full = self.keypoint_names.copy()
+        selected_keypoint_names = [keypoint_names_full[i] for i in selected_keypoints]
         
         # Generate music sheets for different difficulty levels
         success = True
         results = []
         
-        # Define difficulty levels and their corresponding keypoints
-        difficulty_levels = {
-            "easy": easy_keypoints,
-            "normal": medium_keypoints,
-            "hard": hard_keypoints
-        }
-        
         # Process each difficulty level
-        for difficulty, keypoint_indices in difficulty_levels.items():
-            # Create selected keypoint names
-            selected_keypoint_names = [keypoint_names_full[i] for i in keypoint_indices]
+        for difficulty, sampling_rate in difficulty_levels.items():
+            print(f"Generating {difficulty} difficulty with sampling rate {sampling_rate}")
+            
+            # Apply sampling rate to determine which beats to include
+            if sampling_rate < 1.0:
+                sample_interval = max(1, int(1/sampling_rate))
+                sampled_beats = self.beat_poses[::sample_interval]
+                print(f"  - Sampling 1 beat every {sample_interval} beats ({len(sampled_beats)} of {len(self.beat_poses)} total beats)")
+            else:
+                sampled_beats = self.beat_poses
+                print(f"  - Using all {len(sampled_beats)} beats")
             
             # Create music sheet data structure
             music_sheet = {
                 'difficulty': difficulty,
+                'sampling_rate': sampling_rate,
                 'video_info': {
                     'width': self.width,
                     'height': self.height,
@@ -367,28 +374,28 @@ class MusicSheetGenerator:
                 'audio_info': {
                     'tempo': self.tempo
                 },
-                'keypoint_indices': keypoint_indices,
+                'keypoint_indices': selected_keypoints,
                 'keypoint_names': selected_keypoint_names,
                 'beats': []
             }
             
             # Add each beat's data with selected keypoints
-            for pose in self.beat_poses:
+            for pose in sampled_beats:
                 # Create beat data with only selected keypoints
                 if pose['keypoints'] is not None:
                     # Extract only the selected keypoints
-                    selected_keypoints = [pose['keypoints'][i] if i < len(pose['keypoints']) else None for i in keypoint_indices]
+                    selected_kp = [pose['keypoints'][i] if i < len(pose['keypoints']) else None for i in selected_keypoints]
                     
                     # Remove confidence values (keep only x, y coordinates)
-                    if selected_keypoints:
-                        selected_keypoints = [[point[0], point[1]] if point is not None else None for point in selected_keypoints]
+                    if selected_kp:
+                        selected_kp = [[point[0], point[1]] if point is not None else None for point in selected_kp]
                 else:
-                    selected_keypoints = None
+                    selected_kp = None
                 
                 beat_data = {
                     'frame_idx': pose['frame_idx'],
                     'time': pose['time'],
-                    'keypoints': selected_keypoints
+                    'keypoints': selected_kp
                 }
                 
                 music_sheet['beats'].append(beat_data)
@@ -466,35 +473,17 @@ def main():
         print(f"Error: Video file {video_path} does not exist")
         return
     
-    # Get beat sampling rate
-    while True:
-        beat_sample_rate_str = input("Enter beat sampling rate (default 1.0, lower values = fewer beats, e.g. 0.5): ")
-        if beat_sample_rate_str == "":
-            beat_sample_rate = 1.0
-            break
-        try:
-            beat_sample_rate = float(beat_sample_rate_str)
-            if beat_sample_rate <= 0:
-                print("Error: Beat sampling rate must be positive")
-            else:
-                break
-        except ValueError:
-            print("Error: Please enter a valid number")
+    # Using default beat_sample_rate = 1.0 instead of asking user
+    # This will be adjusted per difficulty level in generate_music_sheet
+    beat_sample_rate = 1.0
+    print("Using fixed sampling rates for different difficulty levels:")
+    print("  - Easy: 0.25 (1 beat every 4 beats)")
+    print("  - Normal: 0.5 (1 beat every 2 beats)")
+    print("  - Hard: 1.0 (every beat)")
     
-    # Get hop_length for librosa
-    while True:
-        hop_length_str = input("Enter hop_length for beat detection (default 512, lower values detect more beats): ")
-        if hop_length_str == "":
-            hop_length = 512
-            break
-        try:
-            hop_length = int(hop_length_str)
-            if hop_length <= 0:
-                print("Error: hop_length must be positive")
-            else:
-                break
-        except ValueError:
-            print("Error: Please enter a valid integer")
+    # Using default hop_length without asking user
+    hop_length = 512
+    print(f"Using default hop_length: {hop_length} for beat detection")
     
     # Extract video filename without extension
     video_basename = os.path.basename(video_path)
