@@ -37,10 +37,18 @@ SIDE_COLORS = {
     "center": COLORS["yellow"], # 中间 - 黄色
 }
 
+# 判定等级及其对应的颜色
+JUDGMENT_COLORS = {
+    "Perfect": COLORS["gold"],    # 完美 - 金色
+    "Good": COLORS["green"],      # 良好 - 绿色
+    "Miss": COLORS["red"],        # 错过 - 红色
+}
+
 class Note:
     """表示节奏游戏中带有收缩判定圈的音符。"""
     
-    def __init__(self, x: int, y: int, radius: int, max_radius: int, duration: float = 2.0, keypoint_name: str = None, keypoint_index: int = None):
+    def __init__(self, x: int, y: int, radius: int, max_radius: int, target_time: float, duration: float = 2.0, 
+                 keypoint_name: str = None, keypoint_index: int = None, hit_window_width: float = 0.4, perfect_threshold: float = 0.08):
         """
         初始化一个新的音符。
         
@@ -49,9 +57,12 @@ class Note:
             y: 音符中心的Y坐标
             radius: 音符本身的半径（内圈）
             max_radius: 判定圈的初始半径（外圈）
-            duration: 判定圈完全收缩所需的时间（秒）
+            target_time: 音符应该被精确命中的绝对游戏时间点
+            duration: 音符从出现到达到target_time所需的时间（判定圈从最大缩到最小所需的时间）
             keypoint_name: 这个音符对应的身体部位名称（例如，"Left Wrist"）
             keypoint_index: 这个音符对应的关键点索引（例如，9表示左手腕）
+            hit_window_width: 有效命中窗口的总宽度（秒）
+            perfect_threshold: Perfect判定所需的时间精度阈值（秒）
         """
         self.x = x
         self.y = y
@@ -59,16 +70,31 @@ class Note:
         self.max_radius = max_radius
         self.current_radius = max_radius
         self.duration = duration
-        self.start_time = time.time()
+        
+        # 新的时间属性
+        self.target_time = target_time  # 音符应该被命中的精确时间点
+        self.appear_time = target_time - duration  # 音符首次出现的时间点
+        
+        # 判定窗口
+        self.hit_window_width = hit_window_width
+        self.hit_window_start = target_time - hit_window_width / 2
+        self.hit_window_end = target_time + hit_window_width / 2
+        self.perfect_threshold = perfect_threshold
+        
+        # 状态属性
         self.hit = False
         self.missed = False
         self.judged = False  # 表示这个音符已经被判定
+        self.judgment = None  # 用于存储判定结果："Perfect", "Good", "Miss"
+        self.hit_time = None  # 记录精确命中时间
         self.hit_feedback_time = None
+        
         # 添加渐隐效果相关属性
         self.fade_out = False
         self.fade_start_time = None
-        self.fade_duration = 0.5  # 消失动画持续0.5秒 (原值为1.0秒)
+        self.fade_duration = 0.5  # 消失动画持续0.5秒
         self.opacity = 255  # 完全不透明
+        
         # 添加身体部位名称和索引
         self.keypoint_name = keypoint_name
         self.keypoint_index = keypoint_index
@@ -90,10 +116,10 @@ class Note:
         
     def update(self):
         """
-        根据经过的时间更新判定圈半径。
+        根据当前时间更新音符状态。
         
         Returns:
-            如果判定时机已到（圈完全收缩）则返回True，否则返回False
+            如果音符应该被移除，则返回True，否则返回False
         """
         current_time = time.time()
         
@@ -117,16 +143,20 @@ class Note:
         if self.judged:
             return False
             
-        elapsed = current_time - self.start_time
-        progress = min(1.0, elapsed / self.duration)
+        # 计算音符从出现时间到当前时间的进度
+        elapsed_visual_time = current_time - self.appear_time
+        progress = min(1.0, max(0.0, elapsed_visual_time / self.duration))
         
         # 判定圈从max_radius收缩到note半径
-        self.current_radius = self.max_radius - progress * (self.max_radius - self.radius)
+        self.current_radius = self.radius + (self.max_radius - self.radius) * (1.0 - progress)
         
-        # 检查判定圈是否完全收缩（判定时机）
-        if progress >= 1.0:
-            return True
-            
+        # 检查是否超过判定窗口结束时间（Miss判定）
+        if current_time > self.hit_window_end and not self.judged:
+            self.missed = True
+            self.judged = True
+            self.judgment = "Miss"
+            return False
+        
         return False
     
     def draw(self, screen):
@@ -140,11 +170,9 @@ class Note:
         if self.fade_out:
             # 绘制半透明的note
             color = self.color
-            if self.hit:
-                color = COLORS["green"]
-            elif self.missed:
-                color = COLORS["red"]
-                
+            if self.judgment:
+                color = JUDGMENT_COLORS.get(self.judgment, self.color)
+                    
             # 创建带透明度的表面
             s_size = self.radius * 2
             note_surface = pygame.Surface((s_size, s_size), pygame.SRCALPHA)
@@ -158,7 +186,18 @@ class Note:
             screen.blit(note_surface, (self.x - self.radius, self.y - self.radius))
             screen.blit(border_surface, (self.x - self.radius, self.y - self.radius))
             
-            # 绘制部位名称（如果有），确保使用英文
+            # 绘制判定结果（如果有）
+            if self.judgment:
+                font = pygame.font.Font(None, 30)  # 使用稍大号字体
+                judgment_text = font.render(self.judgment, True, JUDGMENT_COLORS.get(self.judgment, COLORS["white"]))
+                judgment_rect = judgment_text.get_rect(center=(self.x, self.y - self.radius - 20))
+                # 创建文本表面并绘制
+                judgment_surface = pygame.Surface(judgment_text.get_size(), pygame.SRCALPHA)
+                judgment_surface.fill((0, 0, 0, 0))  # 透明背景
+                judgment_surface.blit(judgment_text, (0, 0))
+                screen.blit(judgment_surface, judgment_rect)
+            
+            # 绘制部位名称（如果有）
             if self.keypoint_name:
                 font = pygame.font.Font(None, 20)  # 使用小号字体
                 # 转换部位名称为显示格式 (例如: "left_wrist" -> "Left Wrist")
@@ -182,16 +221,21 @@ class Note:
         
         # 绘制音符（内圈）
         color = self.color  # 使用动态颜色
-        if self.hit:
-            color = COLORS["green"]  # 命中的音符
-        elif self.missed:
-            color = COLORS["red"]  # 错过的音符
+        if self.judgment:
+            color = JUDGMENT_COLORS.get(self.judgment, self.color)
             
         # 根据形状类型绘制不同的几何形状
         self._draw_shape(screen, color, (self.x, self.y), self.radius, fill=True)
         self._draw_shape(screen, COLORS["white"], (self.x, self.y), self.radius, fill=False)
         
-        # 绘制部位名称（如果有），确保使用英文
+        # 绘制判定结果（如果已判定）
+        if self.judgment:
+            font = pygame.font.Font(None, 30)  # 使用稍大号字体
+            judgment_text = font.render(self.judgment, True, JUDGMENT_COLORS.get(self.judgment, COLORS["white"]))
+            judgment_rect = judgment_text.get_rect(center=(self.x, self.y - self.radius - 20))
+            screen.blit(judgment_text, judgment_rect)
+        
+        # 绘制部位名称（如果有）
         if self.keypoint_name:
             font = pygame.font.Font(None, 20)  # 使用小号字体
             # 转换部位名称为显示格式 (例如: "left_wrist" -> "Left Wrist")

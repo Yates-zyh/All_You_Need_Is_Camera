@@ -4,167 +4,108 @@ An interactive framework based on YOLOv11-Pose that allows users to interact wit
 
 ## Project Overview
 
-**'All You Need Is Camera'** is a framework that utilizes computer vision technology, specifically human pose estimation, to enable users to interact with games through a camera. This project uses the **YOLOv11-Pose** model to detect the user's pose in real-time and converts pose data into game control signals. The best part? No special equipment is required-just a standard camera.
+**'All You Need Is Camera'** is a framework that utilizes computer vision technology to enable users to interact with games through a camera. This project uses the **YOLOv11-Pose** model to detect the user's pose in real-time and converts pose data into game control signals.
 
-Currently implemented game examples:
-
-- **Cytus-like Rhythm Game**: Similar to dance mats or music rhythm games, players move their hands and feet to hit notes on the screen. In this game, notes fall along the screen, and players must position their hands or feet in the appropriate positions to 'hit' the notes as they appear in the judgment area.
+Currently implemented:
+- **Rhythm Game**: Players move their hands and feet to hit notes on the screen, similar to dance mat games.
 
 ## Features
 
 - **Game Generation**: Dynamic game note generation based on upload video.
-- **User Calibration**: Calibration of user position and camera angle using **ViT** to minimize the impact of the camera's position and angle.
-- **Pose Detection**: The system uses **YOLOv11-Pose** to detect 17 key points of human pose and translates them into interactive game controls.
-- **Object Interaction**: In addition to body pose interaction, users can use objects like a **fan** or **basketball** to interact with the notes and further personalize the dance map.
-- **Types of Notes**: There are different types of notes in the game such as hit notes, swap notes, hold notes, and turn-around notes.
+- **User Calibration**: Calibration of user position and camera angle using **ViT**.
+- **Pose Detection**: Uses **YOLOv11-Pose** to detect 17 key points and translate them into game controls.
+- **Object Interaction**: Users can use objects like a **fan** or **basketball** to interact with notes.
+- **Types of Notes**: Hit notes, swap notes, hold notes, and turn-around notes.
 
 ## Installation
 
 ### Prerequisites
-
 - Python 3.10+
-- Supported operating systems: Windows, macOS, Linux
-- Camera (laptop built-in camera or USB external camera)
-- GPU acceleration recommended (not required, but improves performance)
+- Camera (laptop built-in or external)
 
 ### Installation Steps
-
 1. Clone the repository:
-
    ```
    git clone <repository_url>
    cd project
    ```
 
-2. Install dependencies using uv:
-
+2. Install dependencies:
    ```
    uv sync
    ```
 
 ## Usage
 
-### Launch the Rhythm Game
+### Creating Music Sheets
+1. Run the generator script:
+   ```
+   python writemusicsheet.py
+   ```
+2. Follow the prompts to set up video path and parameters.
+3. Output files will be stored in `musicsheet/<video_name>/` directory.
 
-Basic launch (with default settings):
-
+### Launch the Game
 ```
 python main.py
 ```
 
-Specify difficulty level:
-
-```
-python main.py --difficulty easy
-```
-
-Available difficulty levels: easy, normal, hard.
-
-Specify camera ID (if you have multiple cameras):
-
-```
-python main.py --camera 1
-```
-
-Specify a custom YOLOv11-Pose model:
-
-```
-python main.py --model path/to/your/model.pt
-```
-
-Adjust window size:
-
-```
-python main.py --width 1024 --height 768
-```
-
 ### Test the Framework
-
-If you want to test the basic functionality of PoseFramework without launching a game, run:
-
 ```
 python test_framework.py
 ```
 
 ## Game Controls
 
-### Cytus-like Rhythm Game
-
-Types of Notes: The game features different types of notes that the user needs to interact with:
-
--    Hit Notes: Regular notes that need to be hit.
--    Swap Notes: Notes that require a hand or foot to move to another position.
--    Hold Notes: Notes that require the user to hold their position for a duration.
--    Turn-Around Notes: Notes that require the user to turn around to face the camera.
-
-Game key controls:
-
-- `ESC`: Pause/Resume game
-- `P`: Pause/Resume game
+- `ESC` or `P`: Pause/Resume game
 - `Q` (while paused): Quit game
-- `Space`: Show/Hide game instructions
+- `Space`: Show/Hide instructions
 
 ## Project Structure
-
 ```
 project/
 ├── aync_camera/              # Main package directory
-│   ├── common/               # Common components and base classes
-│   │   └── game_base.py      # Base class for all games
+│   ├── common/               # Common components
 │   ├── config/               # Configuration modules
-│   │   ├── game_settings.py  # Common game settings
-│   │   └── rhythm_config.py  # Rhythm game specific settings
 │   ├── core/                 # Core framework components
-│   │   └── pose_framework.py # PoseFramework implementation
 │   ├── games/                # Game implementations
-│   │   └── rhythm/           # Rhythm game modules
-│   │       ├── __init__.py   # Main rhythm game class
-│   │       ├── game_logic.py # Game logic implementation
-│   │       ├── note.py       # Note class implementation
-│   │       └── music_sheet_loader.py # Music sheet loading functionality
-│   ├── initialization/       # User and system initialization
+│   ├── initialization/       # User setup
 │   └── ui/                   # User interface components
-│       └── rhythm/           # Rhythm game UI
-│           └── renderer.py   # UI rendering for rhythm game
-├── main.py                   # Main program entry
-├── test_framework.py         # Framework test script
-├── requirements.txt          # Project dependencies
-└── README.md                 # Project documentation
+├── main.py                   # Main entry point
+├── writemusicsheet.py        # Music sheet generator
+├── test_framework.py         # Framework test
+├── musicsheet/               # Generated music sheets
+└── example_video/            # Example videos
 ```
 
 ## Technical Details
 
-- **Pose Detection**: Uses YOLOv11-Pose model to detect 17 key points of human pose, based on COCO dataset format.
-- **Game Engine**: Uses Pygame for game development.
-- **Visual Processing**: Uses OpenCV for camera input and image processing. and 关键帧和节奏获取
-- **ViT Calibration**: Uses ViT (Vision Transformer) to detect user distance and angles to ensure proper calibration for optimal gameplay experience.
-- **DNN Scoring**: Deep Neural Networks (DNN) are used to score the accuracy and fluidity of user movements.
+- **Pose Detection**: YOLOv11-Pose model to detect 17 key points
+- **Game Engine**: Pygame for game development
+- **Visual Processing**: OpenCV for camera input and processing
+- **ViT Calibration**: Vision Transformer for user distance and angle detection
+- **Beat Detection**: Librosa for audio beat detection from videos
+- **Pose Synchronization**: Extracts dancer poses at each beat point
 
 ## Architecture Design
 
-The project follows a modular architecture with clear separation of concerns:
-
-1. **Core Framework**: Provides pose detection and tracking capabilities
-2. **Game Base**: Defines common interfaces and functionality for all games
-3. **Game Logic**: Handles game mechanics, rules, and state management
-4. **UI Rendering**: Manages visual presentation and user interface elements
-5. **Configuration**: Stores game settings and parameters separately from code
-
-This architecture makes the code more maintainable and extensible, allowing for easy addition of new games and features.
+The project follows a modular architecture with:
+1. **Core Framework**: Pose detection capabilities
+2. **Game Base**: Common interfaces for all games
+3. **Game Logic**: Game mechanics and state management
+4. **UI Rendering**: Visual presentation components
+5. **Configuration**: Settings and parameters
 
 ## Future Plans
 
-- Implement more games, such as:
-  - Fruit Ninja Clone: Use hand trajectories to slice fruits
-  - Dance Move Comparison: Compare and score against standard dance moves
-  - fitness game
-- Add multiplayer support
-- Optimize performance, improve detection accuracy and response speed
-- Add sound effects and background music
+- Additional games: Fruit Ninja, Dance Move Comparison, Fitness games
+- Multiplayer support
+- Performance optimization
+- Enhanced audio features
 
 ## Contributing
 
-We welcome contributions in the form of code, issue reports, or suggestions for improvements. Feel free to fork the repository, submit pull requests, or open issues for any bugs or feature requests.
+We welcome contributions in the form of code, issue reports, or suggestions for improvements.
 
 ## License
 
@@ -172,5 +113,5 @@ This project is licensed under the **MIT License**.
 
 ## Acknowledgments
 
-- This project uses the [Ultralytics YOLOv11](https://github.com/ultralytics/ultralytics) model for pose detection
-- Project inspiration comes from similar motion-sensing games and interactive fitness applications
+- [Ultralytics YOLOv11](https://github.com/ultralytics/ultralytics) for pose detection
+- Project inspiration from motion-sensing games and interactive fitness applications

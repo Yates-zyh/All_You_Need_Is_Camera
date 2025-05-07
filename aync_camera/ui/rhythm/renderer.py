@@ -318,38 +318,49 @@ class RhythmGameRenderer:
     
     def render_hit_feedback(self, screen, hit_feedback, hit_feedback_duration):
         """
-        Render hit feedback animation.
+        渲染命中反馈动画，显示判定结果（Perfect/Good/Miss）。
         
         Args:
-            screen: Pygame screen object
-            hit_feedback: Hit feedback data list
-            hit_feedback_duration: Hit feedback duration
+            screen: Pygame屏幕对象
+            hit_feedback: 命中反馈数据列表
+            hit_feedback_duration: 命中反馈持续时间
         """
         current_time = time.time()
         
-        for hit_x, hit_y, hit_time, hit_type in hit_feedback:
-            # Calculate animation progress (0.0 to 1.0)
+        for hit_x, hit_y, hit_time, judgment_result in hit_feedback:
+            # 计算动画进度 (0.0 到 1.0)
             elapsed = current_time - hit_time
             if elapsed > hit_feedback_duration:
                 continue
                 
             progress = elapsed / hit_feedback_duration
-            size = int(50 * (1.0 - progress))  # Start large, shrink as animation progresses
-            alpha = int(255 * (1.0 - progress))  # Fade out
+            size = int(50 * (1.0 - progress))  # 开始大，随动画进行缩小
+            alpha = int(255 * (1.0 - progress))  # 淡出
             
-            # Draw hit effect
-            color = COLORS["green"] if hit_type == "hit" else COLORS["red"]
+            # 根据判定结果选择颜色
+            if judgment_result == "Perfect":
+                color = COLORS["gold"]
+            elif judgment_result == "Good":
+                color = COLORS["green"]
+            elif judgment_result == "Miss":
+                color = COLORS["red"]
+            else:
+                # 兼容旧版的"hit"和其他可能的值
+                color = COLORS["green"] if judgment_result == "hit" else COLORS["red"]
+            
+            # 绘制命中效果
             hit_surface = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
             pygame.draw.circle(hit_surface, (*color, alpha), (size, size), size)
             screen.blit(hit_surface, (hit_x - size, hit_y - size))
             
-            # Draw "HIT!" text (float upwards)
-            text = self.font_medium.render("HIT!", True, color)
+            # 绘制判定结果文本（向上飘动）
+            # 使用判定结果作为显示文本，而不是固定的"HIT!"
+            text = self.font_medium.render(judgment_result, True, color)
             text_surface = pygame.Surface(text.get_size(), pygame.SRCALPHA)
-            text_surface.fill((0, 0, 0, 0))  # Transparent
+            text_surface.fill((0, 0, 0, 0))  # 透明
             text_surface.blit(text, (0, 0))
             text_surface.set_alpha(alpha)
-            offset_y = int(30 * progress)  # Text floats upwards
+            offset_y = int(30 * progress)  # 文本向上飘动
             screen.blit(text_surface, (hit_x - text.get_width() // 2, hit_y - text.get_height() - offset_y))
     
     def render_instructions(self, screen):
