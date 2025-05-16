@@ -144,7 +144,7 @@ def predict_dance_level(model_yolo, video_path):
         original_predict = import_original_predict()
         if original_predict is None:
             st.error("Failed to import original prediction function")
-            return generate_demo_results()
+            return None
         
         # Update progress
         progress.progress(25)
@@ -257,64 +257,6 @@ def predict_dance_level(model_yolo, video_path):
     except Exception as e:
         st.error(f"Error during prediction: {e}")
         return None
-
-# Generate demo results for UI testing
-def generate_demo_results():
-    """Generate demo results for UI testing when models are not available"""
-    # Simulated overall probabilities (Beginner, Intermediate, Expert)
-    overall_probs = [0.25, 0.65, 0.10]  # Example: mostly intermediate
-    
-    # Get the index of the highest probability
-    overall_prediction = np.argmax(overall_probs)
-    
-    # Create segment predictions (5 segments of 15 seconds each)
-    segment_predictions = []
-    segment_times = []
-    
-    # Create varied segment predictions
-    # Simulation pattern: starts weaker, improves in the middle, varies at the end
-    segment_levels = [0, 1, 1, 2, 1]  # 0=Beginner, 1=Intermediate, 2=Expert
-    
-    for i, level in enumerate(segment_levels):
-        # Create segment time (each 15 seconds)
-        start_time = i * 15
-        end_time = (i + 1) * 15
-        segment_times.append((start_time, end_time))
-        
-        # Create segment probabilities
-        if level == 0:  # Beginner
-            probs = np.array([0.70, 0.25, 0.05])
-        elif level == 1:  # Intermediate
-            probs = np.array([0.20, 0.70, 0.10])
-        else:  # Expert
-            probs = np.array([0.10, 0.30, 0.60])
-            
-        # Add some randomness
-        probs += np.random.uniform(-0.1, 0.1, size=3)
-        probs = np.clip(probs, 0.05, 0.95)  # Ensure probabilities aren't too extreme
-        probs = probs / probs.sum()  # Normalize to sum to 1
-        
-        segment_predictions.append((level, probs))
-    
-    # Map levels to readable names
-    level_map = {0: 'Beginner', 1: 'Intermediate', 2: 'Expert'}
-    
-    return {
-        'overall': {
-            'level': level_map[overall_prediction],
-            'prediction': overall_prediction,
-            'probabilities': {
-                'Beginner': overall_probs[0] * 100,
-                'Intermediate': overall_probs[1] * 100,
-                'Expert': overall_probs[2] * 100
-            }
-        },
-        'segments': {
-            'predictions': segment_predictions,
-            'segment_times': segment_times,
-            'total_duration': segment_times[-1][1]  # Last segment end time
-        }
-    }
 
 # Create gauge chart using Plotly
 def create_gauge_chart(probabilities):
